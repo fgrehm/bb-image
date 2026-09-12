@@ -76,14 +76,23 @@ RUN curl -fsSL https://mise.run \
 # working because there is no shim to invoke. It is writable by the user so
 # `mise use -g` works, though such changes live and die with the container.
 ENV MISE_DATA_DIR=/opt/mise
-ENV MISE_CACHE_DIR=/opt/mise/cache
 ENV MISE_GLOBAL_CONFIG_FILE=/opt/mise/config.toml
 ENV PATH="/opt/mise/shims:$PATH"
 
-# npm's cache also lives outside home. It reached 100MB from the global installs
-# below, and anything left in home is copied into the volume on first boot for no
-# reason. Redirecting it here means no npm step can put it back.
-ENV npm_config_cache=/opt/npm-cache
+# No cache location is pinned here, on purpose. A cache is the one thing a volume is
+# the right home for, so with nothing set, runtime npm writes to ~/.npm and mise to
+# ~/.cache/mise, both inside the home volume, where they survive a recreate. Pinning
+# them to /opt made every runtime cache per-container and baked 165MB of build-time
+# cache into the image to no purpose.
+#
+# Build-time caches are the harder half, because a layer is a stack and a delete in a
+# later layer is only a whiteout: bytes written in one layer still count toward the
+# size after a later layer removes them. Verified with a throwaway 200MB layer, where
+# the same delete in a separate RUN left the image at 277MB rather than 77MB. So every
+# RUN that downloads points these at $BUILD_SCRATCH and removes it before the RUN
+# ends, and the bytes never reach a layer. ARG rather than ENV so none of it lands in
+# the runtime environment.
+ARG BUILD_SCRATCH=/tmp/build-scratch
 
 # node is the runtime the image is built around, so it is installed from an
 # explicit version rather than read out of mise.toml. That means the version is
@@ -93,9 +102,9 @@ ENV npm_config_cache=/opt/npm-cache
 # toolset is copied in further down, after the expensive layers, so editing it
 # does not invalidate them.
 ARG NODE_VERSION=24.21.0
-RUN mkdir -p /opt/mise /opt/npm-cache \
+RUN mkdir -p /opt/mise \
     && printf '[tools]\nnode = "%s"\n' "${NODE_VERSION}" > /opt/mise/config.toml \
-    && chown -R $USERNAME:$USERNAME /opt/mise /opt/npm-cache
+    && chown -R $USERNAME:$USERNAME /opt/mise
 
 USER $USERNAME
 
@@ -108,20 +117,28 @@ WORKDIR /home/${USERNAME}
 # named twice, here and in mise.toml, because a layer cannot both install node
 # and depend on the file that declares it. The check further down fails the
 # build if the two drift apart.
-RUN mise install \
+RUN export npm_config_cache="$BUILD_SCRATCH/npm" \
+           XDG_CACHE_HOME="$BUILD_SCRATCH/cache" \
+           XDG_STATE_HOME="$BUILD_SCRATCH/state"; \
+    mise install \
     && mise reshim --force \
-    && node --version
+    && node --version \
+    && rm -rf "$BUILD_SCRATCH"
 
 # bb is installed globally into mise's node install, so bumping the node version
 # above means reinstalling it. npm gates native-addon install scripts, so the
 # three bb depends on have to be allowed explicitly or bb will not work:
 # @parcel/watcher, better-sqlite3, and node-pty are compiled or fetched here.
 ARG BB_VERSION=0.43.1
-RUN npm install -g \
+RUN export npm_config_cache="$BUILD_SCRATCH/npm" \
+           XDG_CACHE_HOME="$BUILD_SCRATCH/cache" \
+           XDG_STATE_HOME="$BUILD_SCRATCH/state"; \
+    npm install -g \
         --allow-scripts=@parcel/watcher,better-sqlite3,node-pty \
         "bb-app@${BB_VERSION}" \
     && mise reshim --force \
-    && bb --version
+    && bb --version \
+    && rm -rf "$BUILD_SCRATCH"
 
 # Playwright's Chromium, ready to use without a first-run download. Browsers go to
 # /opt/ms-playwright, outside home, for the same reason as the toolchain: a
@@ -132,9 +149,13 @@ RUN npm install -g \
 # root, which the toolset layers deliberately are not.
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
 ARG PLAYWRIGHT_VERSION=1.63.0
-RUN npm install -g "playwright@${PLAYWRIGHT_VERSION}" \
+RUN export npm_config_cache="$BUILD_SCRATCH/npm" \
+           XDG_CACHE_HOME="$BUILD_SCRATCH/cache" \
+           XDG_STATE_HOME="$BUILD_SCRATCH/state"; \
+    npm install -g "playwright@${PLAYWRIGHT_VERSION}" \
     && mise reshim --force \
-    && playwright --version
+    && playwright --version \
+    && rm -rf "$BUILD_SCRATCH"
 
 USER root
 RUN playwright install --with-deps chromium \
@@ -170,15 +191,16 @@ COPY --chown=$USERNAME:$USERNAME mise.toml /opt/mise/config.toml
 # (rg, jq, nvim and friends), so a toolset edit re-downloads them. node, bb and
 # Playwright's Chromium sit above it and stay cached.
 #
-# The rm at the end is load-bearing, and it has to be last in the RUN. Installing
-# the aqua-backed tools leaves mise's sigstore TUF cache in ~/.cache/sigstore-rust
-# and its state in ~/.local/state/mise: MISE_CACHE_DIR does not cover the former,
-# which follows XDG_CACHE_HOME. Every later command in this RUN goes through a mise
-# shim and recreates the state dir, so anything after the rm puts it back. Home is
-# volume-backed and seeded once, so leftovers here bake into every new volume.
-# Setting MISE_STATE_DIR and XDG_CACHE_HOME is the alternative, at the cost of
-# putting every XDG cache outside home at runtime; see AGENTS.md.
+# The rm at the end does real work, and it stays last in the RUN. BUILD_SCRATCH
+# takes the downloads and mise's sigstore TUF cache out of $HOME and out of the
+# layer: home is volume-backed and seeded once, so leftovers there bake into every new
+# volume, and a cache committed to a layer stays in the image even after a later layer
+# deletes it. The rm has to follow node and bb, because those go through shims and run
+# mise again, which recreates the state directory.
 RUN set -e; \
+    export npm_config_cache="$BUILD_SCRATCH/npm" \
+           XDG_CACHE_HOME="$BUILD_SCRATCH/cache" \
+           XDG_STATE_HOME="$BUILD_SCRATCH/state"; \
     configured="$(sed -n 's/^node = "\(.*\)"/\1/p' /opt/mise/config.toml)"; \
     if [ "$configured" != "${NODE_VERSION}" ]; then \
       echo "node version mismatch: mise.toml wants '${configured}', Containerfile NODE_VERSION is '${NODE_VERSION}'" >&2; \
@@ -191,7 +213,7 @@ RUN set -e; \
     done; \
     node --version; \
     bb --version; \
-    rm -rf "/home/${USERNAME}/.cache" "/home/${USERNAME}/.local"
+    rm -rf "$BUILD_SCRATCH" "/home/${USERNAME}/.cache" "/home/${USERNAME}/.local"
 
 # ---------------------------------------------------------------------------
 # Locale, editor, login-shell PATH, and the neovim alias.

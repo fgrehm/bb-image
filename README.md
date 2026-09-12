@@ -11,7 +11,7 @@ Batteries included container image for running [bb](https://getbb.app), built to
 - A UTF-8 locale (`LANG=C.UTF-8`) and `EDITOR`/`VISUAL` pointing at `vi`, so `git commit` without `-m` and `git rebase -i` work
 - mise-managed toolchains, agent CLIs, and prek, installed on first use
 - `$HOME` as the working directory, since bb hosts many projects and resolves them by path
-- Almost nothing heavy in `$HOME`. The toolchain is at `/opt/mise`, the Playwright browsers at `/opt/ms-playwright`, and the npm cache at `/opt/npm-cache`, all outside the home volume so first boot copies kilobytes rather than gigabytes into it
+- Almost nothing heavy in `$HOME` at first boot. The toolchain is at `/opt/mise` and the Playwright browsers at `/opt/ms-playwright`, so the home volume is seeded with kilobytes rather than gigabytes. Caches are the exception, and they are meant to be there: at runtime npm writes `~/.npm` and mise writes `~/.cache/mise`, both inside the home volume, so they survive a container recreate
 
 ## Lazy tool loading
 
@@ -114,7 +114,7 @@ The image is built for `linux/amd64` only. `linux/arm64` is untested: `node-pty`
 - bb sends service output to `~/.bb/logs/*` and never to the terminal. The entrypoint runs bb behind a small init that tails both log files, so `make run` and `podman logs bb` both show them.
 - `make run` and `make hack` share the same volume, so a CLI you install or log into in the shell is visible to the server.
 - The toolset has to be the *global* mise config, which is what `MISE_GLOBAL_CONFIG_FILE` points at. Moving it to the system config at `/etc/mise` looks tidier and reads identically, but mise only creates bootstrap shims for tools from the user and project scope, so every lazy tool would silently lose its shim and first-use installation would stop working.
-- Keep anything the image owns out of `$HOME`. Home is volume-backed, so a file placed there freezes at first boot and shadows later image updates. That is why the toolset, mise's data dir, Playwright's browsers, and the npm cache are all under `/opt`.
+- Keep anything the image owns out of `$HOME`. Home is volume-backed, so a file placed there freezes at first boot and shadows later image updates. That is why the toolset, mise's data dir, and Playwright's browsers are all under `/opt`. Caches are the deliberate exception: nothing in the image pins a cache location, so runtime caches land in the home volume and persist, while build-time caches go to `/tmp` and are removed inside the same `RUN`, because a delete in a later layer reclaims nothing.
 - Only small tools are left to first use. Since the toolchain lives in the image rather than a volume, a runtime-installed tool is gone once the container is recreated and is re-fetched on next use. The dev tools are the exception: they are baked because they are used constantly, so the re-fetch would happen in every fresh container.
 - A login shell keeps the lazy tools. Debian's `/etc/profile` resets `PATH` outright, which used to drop the mise shims and make every lazy tool "command not found" under `bash -l`. `/etc/profile.d/mise-shims.sh` puts them back. zsh never had the problem, since `/etc/zsh/zshenv` only sets `PATH` when it is empty.
 - `LANG` is `C.UTF-8` rather than unset, so non-ASCII in Ruby, `git log`, and tool output behaves. `EDITOR` and `VISUAL` both point at `vi`, which is neovim.
