@@ -5,18 +5,36 @@ FROM docker.io/library/debian@sha256:d7e12182ce18b85b93007c1dedf31f2d29e01ccf318
 # Scoped to the build rather than ENV, so it does not leak into the final image.
 ARG DEBIAN_FRONTEND=noninteractive
 
+# Only what mise has no backend for, plus python3, which matters here and basically
+# nowhere else. During the bb install below, the global config still declares node
+# alone, so no lazy shims exist yet and python3 is otherwise absent from the build.
+# That is the blocker the README names for arm64 node-gyp builds. At runtime the
+# mise shim sits ahead of /usr/bin on PATH, so bare python3 is mise's and this copy
+# is reached by absolute path only.
+#
+# The rest are the gaps an agent host feels immediately: procps is `ps`, less is
+# git's pager, unzip is assumed by installers, pkg-config is needed by native builds
+# that build-essential does not cover, and gnupg is commit signing.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
                        build-essential \
                        ca-certificates \
                        curl \
                        git \
+                       gnupg \
+                       less \
                        libpq-dev \
                        libsqlite3-dev \
                        libssl-dev \
                        openssh-client \
+                       pkg-config \
                        postgresql-client \
+                       procps \
+                       python3 \
+                       rsync \
                        sqlite3 \
+                       unzip \
+                       wget \
                        zlib1g-dev \
                        zsh \
     && rm -rf /var/lib/apt/lists/*
@@ -147,9 +165,19 @@ COPY --chown=$USERNAME:$USERNAME scripts/entrypoint.sh /home/${USERNAME}/entrypo
 COPY --chown=$USERNAME:$USERNAME mise.toml /opt/mise/config.toml
 
 # Catch a NODE_VERSION that no longer matches the toolset rather than shipping an
-# image whose node is not the one mise reports. Then reconcile the shim farm,
-# which is cheap: node is already installed and the rest of the tools are lazy,
-# so this only creates their bootstrap shims.
+# image whose node is not the one mise reports. Then install the baked tools and
+# reconcile the shim farm. This is the layer that downloads the baked dev tools
+# (rg, jq, nvim and friends), so a toolset edit re-downloads them. node, bb and
+# Playwright's Chromium sit above it and stay cached.
+#
+# The rm at the end is load-bearing, and it has to be last in the RUN. Installing
+# the aqua-backed tools leaves mise's sigstore TUF cache in ~/.cache/sigstore-rust
+# and its state in ~/.local/state/mise: MISE_CACHE_DIR does not cover the former,
+# which follows XDG_CACHE_HOME. Every later command in this RUN goes through a mise
+# shim and recreates the state dir, so anything after the rm puts it back. Home is
+# volume-backed and seeded once, so leftovers here bake into every new volume.
+# Setting MISE_STATE_DIR and XDG_CACHE_HOME is the alternative, at the cost of
+# putting every XDG cache outside home at runtime; see AGENTS.md.
 RUN set -e; \
     configured="$(sed -n 's/^node = "\(.*\)"/\1/p' /opt/mise/config.toml)"; \
     if [ "$configured" != "${NODE_VERSION}" ]; then \
@@ -158,8 +186,68 @@ RUN set -e; \
     fi; \
     mise install; \
     mise reshim --force; \
+    for shim in fd git-lfs jq nvim rg shfmt shellcheck tmux; do \
+      [ -x "/opt/mise/shims/$shim" ] || { echo "missing shim for baked tool: $shim" >&2; exit 1; }; \
+    done; \
     node --version; \
-    bb --version
+    bb --version; \
+    rm -rf "/home/${USERNAME}/.cache" "/home/${USERNAME}/.local"
+
+# ---------------------------------------------------------------------------
+# Locale, editor, login-shell PATH, and the neovim alias.
+#
+# This block sits last on purpose. An ENV invalidates every layer below it, so
+# putting LANG up with the other ENVs would force node, bb and Playwright's
+# Chromium to rebuild. Nothing above needs these values.
+# ---------------------------------------------------------------------------
+
+# LANG is unset in the base image and LC_CTYPE lands on POSIX, which shows up as
+# encoding trouble in anything that prints non-ASCII. C.UTF-8 needs no locales
+# package on Debian 13.
+ENV LANG=C.UTF-8
+# git reaches for $EDITOR for `git commit` without -m and for `git rebase -i`.
+ENV EDITOR=vi
+ENV VISUAL=vi
+
+USER root
+
+# Debian's /etc/profile resets PATH outright, which drops the mise shims, so a login
+# shell (`bash -l`, ssh, or anything bb spawns through one) loses every lazy tool and
+# they all become "command not found". Image-owned, so unlike ~/.bashrc this is not
+# frozen into the home volume and can still be fixed after a volume exists.
+RUN printf '%s\n' \
+      '# Debian /etc/profile resets PATH, which drops the mise shims. Put them back.' \
+      'case ":$PATH:" in' \
+      '  *:/opt/mise/shims:*) ;;' \
+      '  *) PATH="/opt/mise/shims:$PATH" ;;' \
+      'esac' \
+      'export PATH' \
+      > /etc/profile.d/mise-shims.sh \
+    && chmod 0644 /etc/profile.d/mise-shims.sh
+
+# neovim as vi and vim, for the whole container.
+#
+# These must be wrapper scripts and not symlinks. mise's shims are symlinks to the
+# mise binary and it dispatches on the tool name in argv[0], so a shim reached as
+# "vim" is rejected with "vim is not a valid shim". `exec nvim` re-enters through the
+# shim under its real name instead. mise's neovim declares bins = ["nvim"], so no
+# vim/vi shim exists to shadow these, and the loop refuses to continue if that ever
+# changes. See AGENTS.md before replacing this with a symlink.
+RUN set -e; \
+    for name in vi vim; do \
+      if [ -e "/opt/mise/shims/$name" ]; then \
+        echo "refusing to shadow the $name shim with the neovim wrapper" >&2; \
+        exit 1; \
+      fi; \
+      printf '%s\n' '#!/bin/sh' \
+        '# neovim, aliased for the whole container. Not a symlink, see AGENTS.md.' \
+        'exec nvim "$@"' \
+        > "/usr/local/bin/$name"; \
+      chmod 0755 "/usr/local/bin/$name"; \
+    done; \
+    HOME=/tmp vi --version | head -1
+
+USER $USERNAME
 
 # Default to serving bb, with the entrypoint forwarding signals so `podman stop`
 # is a clean shutdown. Override with a command to get a shell instead:

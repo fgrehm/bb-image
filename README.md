@@ -6,6 +6,9 @@ Batteries included container image for running [bb](https://getbb.app), built to
 
 - Debian 13 slim, pinned by digest, running as an unprivileged `developer` user (uid/gid 1000)
 - Node.js, bb, and Playwright with Chromium installed at build time, so the image can serve and drive a browser without a first-run download
+- A baked dev toolset: `rg`, `jq`, `fd`, `shfmt`, `shellcheck`, `tmux`, `git-lfs`, and neovim, which is aliased to `vi` and `vim` for the whole container
+- The usual CLI gaps filled by apt: `ps`, `less`, `unzip`, `pkg-config`, `gpg`, `rsync`, `wget`
+- A UTF-8 locale (`LANG=C.UTF-8`) and `EDITOR`/`VISUAL` pointing at `vi`, so `git commit` without `-m` and `git rebase -i` work
 - mise-managed toolchains, agent CLIs, and prek, installed on first use
 - `$HOME` as the working directory, since bb hosts many projects and resolves them by path
 - Almost nothing heavy in `$HOME`. The toolchain is at `/opt/mise`, the Playwright browsers at `/opt/ms-playwright`, and the npm cache at `/opt/npm-cache`, all outside the home volume so first boot copies kilobytes rather than gigabytes into it
@@ -18,7 +21,11 @@ The toolset is `mise.toml` in this repo, installed into the image as the global 
 
 | Installed at build time | Installed on first use |
 | --- | --- |
-| `node`, `bb`, `playwright` with Chromium | `ruby`, `bun`, `go`, `rust`, `python`, `gh`, `prek`, `claude`, `codex`, `pi`, `opencode`, `grok`, `omp` |
+| `node`, `bb`, `playwright` with Chromium, `neovim`, `rg`, `jq`, `fd`, `shfmt`, `shellcheck`, `tmux`, `git-lfs` | `ruby`, `bun`, `go`, `rust`, `python`, `gh`, `prek`, `claude`, `codex`, `pi`, `opencode`, `grok`, `omp` |
+
+The dev tools are baked even though they are cheap, because the toolchain is not volume-backed: a lazy copy would be re-fetched in every fresh container. The trade is that they sit at and below the layer that declares `mise.toml`, so editing the toolset re-downloads them, while node, bb, and Chromium stay cached.
+
+`ripgrep` installs an `rg` shim and there is no `ripgrep` command. `vi` and `vim` are neovim, through small wrapper scripts in `/usr/local/bin`; they are not symlinks to the mise shim, because mise dispatches shims on `argv[0]` and a shim reached as `vim` is rejected outright.
 
 The toolset is the global config and sits outside the home volume, so a rebuild always takes effect. Projects you mount can still pin versions with their own `mise.toml`, and `mise use -g` works inside the container too, though those changes live and die with it.
 
@@ -108,7 +115,9 @@ The image is built for `linux/amd64` only. `linux/arm64` is untested: `node-pty`
 - `make run` and `make hack` share the same volume, so a CLI you install or log into in the shell is visible to the server.
 - The toolset has to be the *global* mise config, which is what `MISE_GLOBAL_CONFIG_FILE` points at. Moving it to the system config at `/etc/mise` looks tidier and reads identically, but mise only creates bootstrap shims for tools from the user and project scope, so every lazy tool would silently lose its shim and first-use installation would stop working.
 - Keep anything the image owns out of `$HOME`. Home is volume-backed, so a file placed there freezes at first boot and shadows later image updates. That is why the toolset, mise's data dir, Playwright's browsers, and the npm cache are all under `/opt`.
-- Only small tools are left to first use. Since the toolchain lives in the image rather than a volume, a runtime-installed tool is gone once the container is recreated and is re-fetched on next use.
+- Only small tools are left to first use. Since the toolchain lives in the image rather than a volume, a runtime-installed tool is gone once the container is recreated and is re-fetched on next use. The dev tools are the exception: they are baked because they are used constantly, so the re-fetch would happen in every fresh container.
+- A login shell keeps the lazy tools. Debian's `/etc/profile` resets `PATH` outright, which used to drop the mise shims and make every lazy tool "command not found" under `bash -l`. `/etc/profile.d/mise-shims.sh` puts them back. zsh never had the problem, since `/etc/zsh/zshenv` only sets `PATH` when it is empty.
+- `LANG` is `C.UTF-8` rather than unset, so non-ASCII in Ruby, `git log`, and tool output behaves. `EDITOR` and `VISUAL` both point at `vi`, which is neovim.
 - Playwright's browsers are pre-downloaded to `/opt/ms-playwright`, and `PLAYWRIGHT_BROWSERS_PATH` points there, so a project only needs the `playwright` package to use them.
 - `minimum_release_age` is unset, which is what lets the unpinned agent CLIs resolve to the newest release. Enabling it would hold them back; Omarchy zeroes it per invocation (`MISE_MINIMUM_RELEASE_AGE=0`) for the same reason.
 - `node` is pinned by `NODE_VERSION` in the `Containerfile` as well as in `mise.toml`. That duplication is what keeps a toolset edit from rebuilding the node and bb layers, and the build fails if the two disagree.

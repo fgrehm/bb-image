@@ -15,6 +15,25 @@ jobs = 4
 # readable error if they drift, so bump both together.
 node = "24.21.0"
 
+# Also installed at image build time. Small, used constantly, and the toolchain is not
+# volume-backed, so anything lazy here would be re-fetched in every fresh container.
+#
+# The trade is that these land in the layer at and below `COPY mise.toml`, so editing
+# the toolset re-downloads them. node, bb and Playwright's Chromium sit above that COPY
+# and stay cached. mise's neovim declares bins = ["nvim"], which is what lets the
+# container alias vi and vim to it without shadowing a shim.
+#
+# ripgrep installs an `rg` shim and no `ripgrep` command. tmux comes from
+# aqua:tmux/tmux-builds, which is prebuilt; the asdf fallback backend compiles it.
+neovim     = "0.12.5"
+ripgrep    = "15.2.0"
+jq         = "1.8.2"
+shfmt      = "3.14.1"
+git-lfs    = "3.8.0"
+fd         = "10.5.0"
+tmux       = "3.7c"
+shellcheck = "0.11.0"
+
 # First use only. Bootstrap shims are created at build time and install
 # these on first invocation.
 ruby = { version = "4.0.6", lazy = true }
