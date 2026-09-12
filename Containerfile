@@ -28,37 +28,69 @@ ARG USER_GID=1000
 RUN groupadd --gid $USER_GID $USERNAME \
     && useradd --uid $USER_UID --gid $USER_GID -m -s /bin/bash $USERNAME
 
-# bb hosts many projects and resolves them by path, so home is the sane default
-# rather than a single mount point. Mount a tree under it (see the Makefile).
-USER $USERNAME
-WORKDIR /home/${USERNAME}
+# ---------------------------------------------------------------------------
+# mise, its toolchains, and the toolset all live outside the user's home.
+#
+# Home is volume-backed at runtime, and a named volume is seeded from the image
+# exactly once. Anything the image owns under home would therefore freeze at
+# first boot and shadow later image updates. Keeping the toolchain out of home
+# means the baked tools stay in step with the image instead of drifting inside
+# a volume, and it keeps the first-boot copy into that volume small.
+# ---------------------------------------------------------------------------
 
 # The installer verifies the release checksum. Pinning MISE_VERSION keeps the
 # build reproducible and selects the checksum from that release's SHASUMS256.txt.
 ARG MISE_VERSION=2026.9.5
-RUN curl -fsSL https://mise.run | MISE_VERSION="v${MISE_VERSION}" sh
+RUN curl -fsSL https://mise.run \
+    | MISE_INSTALL_PATH=/usr/local/bin/mise MISE_VERSION="v${MISE_VERSION}" sh
 
-# ~/.local/bin is where mise.run installs the binary. ~/.local/share/mise/shims
-# is the shim farm that resolves tools in non-interactive processes, which is
-# how bb spawns agent CLIs.
-ENV PATH="/home/${USERNAME}/.local/bin:/home/${USERNAME}/.local/share/mise/shims:$PATH"
+# MISE_DATA_DIR holds installed toolchains and the shim farm, and
+# MISE_GLOBAL_CONFIG_FILE points the toolset outside home. Both are deliberately
+# not volume-backed: what the image bakes stays current, and anything installed at
+# runtime is per-container. /usr/local/bin, where the binary went, is on the
+# default PATH.
+#
+# The toolset has to be the *global* config rather than the system config at
+# /etc/mise, even though the latter reads just as well. mise only creates
+# bootstrap shims for tools it picks up from the user or project scope, so the
+# same file under /etc/mise yields shims for installed tools only: node and bb
+# get one, every lazy tool silently does not, and first-use installation stops
+# working because there is no shim to invoke. It is writable by the user so
+# `mise use -g` works, though such changes live and die with the container.
+ENV MISE_DATA_DIR=/opt/mise
+ENV MISE_CACHE_DIR=/opt/mise/cache
+ENV MISE_GLOBAL_CONFIG_FILE=/opt/mise/config.toml
+ENV PATH="/opt/mise/shims:$PATH"
 
-# ---------------------------------------------------------------------------
-# Everything above depends only on the base image, mise, and the versions named
-# in this file. Everything below is split so that the expensive layers do not
-# depend on mise.toml: editing the toolset would otherwise re-download node and
-# reinstall bb on every change.
-# ---------------------------------------------------------------------------
+# npm's cache also lives outside home. It reached 100MB from the global installs
+# below, and anything left in home is copied into the volume on first boot for no
+# reason. Redirecting it here means no npm step can put it back.
+ENV npm_config_cache=/opt/npm-cache
+
+# node is the runtime the image is built around, so it is installed from an
+# explicit version rather than read out of mise.toml. That means the version is
+# named twice, here and in mise.toml, because a layer cannot both install node
+# and depend on the file that declares it. The check further down fails the build
+# if the two drift apart. This is a bootstrap config holding only node; the real
+# toolset is copied in further down, after the expensive layers, so editing it
+# does not invalidate them.
+ARG NODE_VERSION=24.21.0
+RUN mkdir -p /opt/mise /opt/npm-cache \
+    && printf '[tools]\nnode = "%s"\n' "${NODE_VERSION}" > /opt/mise/config.toml \
+    && chown -R $USERNAME:$USERNAME /opt/mise /opt/npm-cache
+
+USER $USERNAME
+
+# bb hosts many projects and resolves them by path, so home is the sane default
+# rather than a single mount point. Mount a tree under it (see the Makefile).
+WORKDIR /home/${USERNAME}
 
 # node is the runtime the image is built around, so it is installed from an
 # explicit version rather than read out of mise.toml. That means the version is
 # named twice, here and in mise.toml, because a layer cannot both install node
 # and depend on the file that declares it. The check further down fails the
 # build if the two drift apart.
-ARG NODE_VERSION=24.21.0
-RUN mkdir -p /home/${USERNAME}/.config/mise \
-    && printf '[tools]\nnode = "%s"\n' "${NODE_VERSION}" > /home/${USERNAME}/.config/mise/config.toml \
-    && mise install \
+RUN mise install \
     && mise reshim --force \
     && node --version
 
@@ -73,13 +105,34 @@ RUN npm install -g \
     && mise reshim --force \
     && bb --version
 
-# ~/.bb holds server state. Creating it as the developer user means a named
-# volume mounted at that path inherits the right uid/gid instead of starting out
-# root-owned, which would stop bb from writing to it.
+# Playwright's Chromium, ready to use without a first-run download. Browsers go to
+# /opt/ms-playwright, outside home, for the same reason as the toolchain: a
+# volume-backed home would otherwise copy ~170MB into the volume at first boot.
+#
+# It is an npm global rather than a mise tool so that the browser download sits in
+# a layer toolset edits do not invalidate, and because `install --with-deps` needs
+# root, which the toolset layers deliberately are not.
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
+ARG PLAYWRIGHT_VERSION=1.63.0
+RUN npm install -g "playwright@${PLAYWRIGHT_VERSION}" \
+    && mise reshim --force \
+    && playwright --version
+
+USER root
+RUN playwright install --with-deps chromium \
+    && rm -rf /var/lib/apt/lists/* \
+    && chown -R $USERNAME:$USERNAME /opt/ms-playwright
+USER $USERNAME
+
+# ~/.bb holds server state. It is created in the image so the copy-up into a home
+# volume carries the right uid/gid: a volume created empty would be root-owned
+# and bb could not write to it.
 RUN mkdir -p /home/${USERNAME}/.bb
 
 # Interactive shells get full activation for env vars and hooks. Shims stay on
-# PATH for non-interactive processes.
+# PATH for non-interactive processes. Home is volume-backed at runtime, so these
+# files freeze at first boot and changing them later will not reach an existing
+# volume.
 RUN printf '%s\n' 'eval "$(mise activate bash)"' >> /home/${USERNAME}/.bashrc \
     && printf '%s\n' 'eval "$(mise activate zsh)"' >> /home/${USERNAME}/.zshrc
 
@@ -89,18 +142,16 @@ COPY --chown=$USERNAME:$USERNAME scripts/entrypoint.sh /home/${USERNAME}/entrypo
 # The toolset. Only this and below rebuild when mise.toml changes.
 # ---------------------------------------------------------------------------
 
-# The toolset is installed as the *global* config. Global config is always
-# trusted, so no `mise trust` step is needed, and mounted projects can still
-# override it with their own mise.toml. This overwrites the bootstrap config
-# written above.
-COPY --chown=$USERNAME:$USERNAME mise.toml /home/${USERNAME}/.config/mise/config.toml
+# Overwrites the bootstrap config written above. Owned by the user so that
+# `mise use -g` keeps working.
+COPY --chown=$USERNAME:$USERNAME mise.toml /opt/mise/config.toml
 
-# Catch a NODE_VERSION that no longer matches the toolset rather than shipping
-# an image whose node is not the one mise reports. Then reconcile the shim farm
-# with the real toolset, which is cheap: node is already installed and the rest
-# of the tools are lazy, so this only creates their bootstrap shims.
+# Catch a NODE_VERSION that no longer matches the toolset rather than shipping an
+# image whose node is not the one mise reports. Then reconcile the shim farm,
+# which is cheap: node is already installed and the rest of the tools are lazy,
+# so this only creates their bootstrap shims.
 RUN set -e; \
-    configured="$(sed -n 's/^node = "\(.*\)"/\1/p' /home/${USERNAME}/.config/mise/config.toml)"; \
+    configured="$(sed -n 's/^node = "\(.*\)"/\1/p' /opt/mise/config.toml)"; \
     if [ "$configured" != "${NODE_VERSION}" ]; then \
       echo "node version mismatch: mise.toml wants '${configured}', Containerfile NODE_VERSION is '${NODE_VERSION}'" >&2; \
       exit 1; \

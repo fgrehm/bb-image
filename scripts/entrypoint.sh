@@ -6,19 +6,15 @@
 # behind a single PID 1 lets that PID both follow the logs and forward SIGTERM,
 # so `podman stop` shuts bb down cleanly (bb-app traps SIGTERM and exits 0)
 # rather than killing it after the grace period.
+#
+# There is deliberately no `mise reshim` here. The shim farm lives at
+# /opt/mise/shims, outside the home volume, so it is never shadowed by a stale
+# copy of itself and never needs reconciling at startup.
 set -uo pipefail
 
 data_dir="${BB_DATA_DIR:-$HOME/.bb}"
 log_dir="$data_dir/logs"
 mkdir -p "$log_dir"
-
-# mise's data dir is usually volume-backed, and a named volume is seeded from the
-# image only once. Its shim farm is therefore a snapshot from whenever that
-# volume was created, and it shadows the image's, so a tool added to mise.toml
-# since then is unreachable: with no shim there is no way to trigger the install.
-# Reconciling takes about 20ms. Failure is not fatal, so the container still
-# starts without a network.
-mise reshim --force >/dev/null 2>&1 || true
 
 # -F follows by name and retries, so this is safe to start before bb has
 # created either log.

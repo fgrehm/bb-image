@@ -12,16 +12,19 @@ BB_PORT ?= 38886
 # Container name, so `podman stop bb` works and shutdown stays clean.
 NAME ?= bb
 
-# Container-owned state, as named volumes. Both are seeded from the image the
-# first time they are created, which is what puts the baked shims and node into
-# MISE_VOLUME. Pointing these at an empty bind mount instead will leave the
-# container with no tools on PATH.
-STATE_VOLUME ?= bb-state
-MISE_VOLUME ?= bb-mise
-VOLUMES = -v $(STATE_VOLUME):/home/developer/.bb -v $(MISE_VOLUME):/home/developer/.local/share/mise
+# One volume, holding the whole home directory, so credentials, git config, ssh
+# keys, shell history, and bb state all survive a container rebuild with no
+# per-CLI mount list to maintain. It is seeded from the image the first time it
+# is created, which is where ~/.bb and the shell config come from.
+#
+# The toolchain deliberately is not volume-backed. It lives in the image at
+# /opt/mise so it stays in step with the image rather than freezing at volume
+# creation, and so the first-boot copy into this volume stays small.
+HOME_VOLUME ?= bb-home
+VOLUMES = -v $(HOME_VOLUME):/home/developer
 
-# Host integration. Nothing here by default; see the README for the mounts that
-# share your git identity, SSH keys, and agent CLI logins.
+# Optional host integration, for reusing logins you already have instead of
+# signing in again inside the container. See the README.
 MOUNTS ?=
 
 # Rootless podman maps container uid 1000 to a subordinate uid by default, so

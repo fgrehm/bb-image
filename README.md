@@ -5,23 +5,26 @@ Batteries included container image for running [bb](https://getbb.app), built to
 ## What's in it
 
 - Debian 13 slim, pinned by digest, running as an unprivileged `developer` user (uid/gid 1000)
-- Node.js and bb installed at build time, so the image is ready to serve
-- mise-managed toolchains and agent CLIs, installed on first use
+- Node.js, bb, and Playwright with Chromium installed at build time, so the image can serve and drive a browser without a first-run download
+- mise-managed toolchains, agent CLIs, and prek, installed on first use
 - `$HOME` as the working directory, since bb hosts many projects and resolves them by path
+- Almost nothing heavy in `$HOME`. The toolchain is at `/opt/mise`, the Playwright browsers at `/opt/ms-playwright`, and the npm cache at `/opt/npm-cache`, all outside the home volume so first boot copies kilobytes rather than gigabytes into it
 
 ## Lazy tool loading
 
 The image follows Omarchy's [lazy-loading mise stubs](https://omarchy.org/manual/development-tools/): rather than baking in every toolchain, it ships mise shims and lets a tool install itself the first time you call it.
 
-The toolset is `mise.toml` in this repo, installed into the image as the global mise config at `~/.config/mise/config.toml`. Anything bb does not need in order to start is declared `lazy = true`, which makes mise generate bootstrap shims at build time. The first call to `go`, `python`, or `claude` installs that tool, then runs it.
+The toolset is `mise.toml` in this repo, installed into the image as the global mise config at `/opt/mise/config.toml`. Anything bb does not need in order to start is declared `lazy = true`, which makes mise generate bootstrap shims at build time. The first call to `go`, `python`, or `claude` installs that tool, then runs it.
 
 | Installed at build time | Installed on first use |
 | --- | --- |
-| `node`, `bb` | `ruby`, `bun`, `go`, `rust`, `python`, `gh`, `claude`, `codex`, `pi`, `opencode`, `grok`, `omp` |
+| `node`, `bb`, `playwright` with Chromium | `ruby`, `bun`, `go`, `rust`, `python`, `gh`, `prek`, `claude`, `codex`, `pi`, `opencode`, `grok`, `omp` |
 
-Because the toolset is the *global* config, projects you mount can still pin their own versions with a project `mise.toml`. Configs that use only plain version strings need no trust step; ones using `[settings]`, `[env]`, inline tables, or templated tasks do.
+The toolset is the global config and sits outside the home volume, so a rebuild always takes effect. Projects you mount can still pin versions with their own `mise.toml`, and `mise use -g` works inside the container too, though those changes live and die with it.
 
-Agent CLIs are deliberately unpinned, so a fresh container resolves the current release rather than whatever was current when the image was built.
+Agent CLIs and prek are deliberately unpinned, so a fresh container resolves the current release rather than whatever was current when the image was built.
+
+Configs that use only plain version strings need no trust step; ones using `[settings]`, `[env]`, inline tables, or templated tasks do.
 
 ## Running it
 
@@ -39,8 +42,7 @@ bb's default port is 38886. If something else on your machine already owns it, p
 podman run -d --name bb \
   --userns=keep-id \
   -p 38886:38886 \
-  -v bb-state:/home/developer/.bb \
-  -v bb-mise:/home/developer/.local/share/mise \
+  -v bb-home:/home/developer \
   -v "$HOME/src:/home/developer/src:Z" \
   bb:dev
 ```
@@ -49,20 +51,20 @@ podman run -d --name bb \
 
 On Docker, `--userns=keep-id` does not exist. Rootful Docker already writes bind mounts as uid 1000, which is your user on most single-user Linux installs. With rootless Docker, check what your files look like before trusting it.
 
-### What persists, and what does not
+### What persists
+
+One volume covers everything worth keeping: threads, projects, settings, the auth secret, provider logins, git config, ssh keys, and shell history. It is seeded from the image on first creation, which is where `~/.bb` and the shell config come from, and it stays small because nothing heavy lives in `$HOME`.
 
 | Mount | Holds | If you leave it out |
 | --- | --- | --- |
-| `bb-state:/home/developer/.bb` | Threads, projects, settings, auth secret | Every container starts empty |
-| `bb-mise:/home/developer/.local/share/mise` | Installed toolchains and shims | Every new container reinstalls tools |
+| `bb-home:/home/developer` | bb state, provider logins, git and ssh config, history | All of it dies with the container and you re-login to every provider |
 | `~/src:/home/developer/src` | Your code | bb has nothing to work on |
-| `bb-home` style mounts | Whatever else you want to keep | That data dies with the container |
 
-Use named volumes for the two container-owned directories. Both are seeded from the image the first time they are created, which is what puts the baked shims and node into the mise volume. Pointing either at an empty bind mount leaves the container with no tools on `PATH`.
+The toolchain is deliberately *not* on a volume. It lives in the image at `/opt/mise`, so it stays in step with the image instead of freezing at volume creation. The trade is that tools installed at runtime are per-container and re-fetched after a rebuild, which is why only cheap ones are left to first use.
 
-### Sharing your host logins and identity
+### Reusing logins you already have on the host
 
-Nothing outside those two volumes persists by default, so agent CLI logins have to be mounted in or repeated on every new container. Reusing the host's is usually less work, and means one login serves both:
+Not required, since the home volume keeps its own logins. But if you would rather not sign in twice, mount the host's:
 
 ```bash
 make run MOUNTS='-v ~/.config/git:/home/developer/.config/git \
@@ -103,9 +105,11 @@ The image is built for `linux/amd64` only. `linux/arm64` is untested: `node-pty`
 
 - First-use installs write progress to stderr and never to stdout, so captured tool output stays clean. Without a TTY, as for anything bb spawns, mise degrades to plain text lines with no ANSI escapes and no carriage-return redraws. `MISE_QUIET=1` silences it entirely.
 - bb sends service output to `~/.bb/logs/*` and never to the terminal. The entrypoint runs bb behind a small init that tails both log files, so `make run` and `podman logs bb` both show them.
-- `make run` and `make hack` share the same volumes, so a CLI you install or log into in the shell is visible to the server.
-- Bumping a pinned version in `mise.toml` leaves the old install in the mise volume and downloads the new one on first use. `podman volume rm bb-mise` reclaims it.
-- The mise volume's shim farm is a snapshot from when that volume was created, and it shadows the image's. The entrypoint runs `mise reshim` on every start to reconcile it. Without that, a tool added to a rebuilt image installs correctly but has no shim, so there is no way to invoke it and you get `command not found` for something that is genuinely installed.
+- `make run` and `make hack` share the same volume, so a CLI you install or log into in the shell is visible to the server.
+- The toolset has to be the *global* mise config, which is what `MISE_GLOBAL_CONFIG_FILE` points at. Moving it to the system config at `/etc/mise` looks tidier and reads identically, but mise only creates bootstrap shims for tools from the user and project scope, so every lazy tool would silently lose its shim and first-use installation would stop working.
+- Keep anything the image owns out of `$HOME`. Home is volume-backed, so a file placed there freezes at first boot and shadows later image updates. That is why the toolset, mise's data dir, Playwright's browsers, and the npm cache are all under `/opt`.
+- Only small tools are left to first use. Since the toolchain lives in the image rather than a volume, a runtime-installed tool is gone once the container is recreated and is re-fetched on next use.
+- Playwright's browsers are pre-downloaded to `/opt/ms-playwright`, and `PLAYWRIGHT_BROWSERS_PATH` points there, so a project only needs the `playwright` package to use them.
 - `minimum_release_age` is unset, which is what lets the unpinned agent CLIs resolve to the newest release. Enabling it would hold them back; Omarchy zeroes it per invocation (`MISE_MINIMUM_RELEASE_AGE=0`) for the same reason.
 - `node` is pinned by `NODE_VERSION` in the `Containerfile` as well as in `mise.toml`. That duplication is what keeps a toolset edit from rebuilding the node and bb layers, and the build fails if the two disagree.
 - Bumping the node version means reinstalling bb, since bb lives inside mise's node install.

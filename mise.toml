@@ -24,6 +24,9 @@ rust = { version = "1.98.1", lazy = true }
 python = { version = "3.14.7", lazy = true }
 gh = { version = "2.100.0", lazy = true }
 
+# Pre-commit hooks. Deliberately unpinned.
+prek = { version = "latest", lazy = true }
+
 # Coding agent CLIs. Deliberately unpinned: `latest` resolves when the shim
 # first runs, so a fresh container pulls the current release rather than a stale
 # bake. bb dispatches to whichever of these you have authenticated.
