@@ -1,0 +1,35 @@
+[settings]
+# Non-interactive by design: the image build and first-use installs must never prompt.
+yes = true
+jobs = 4
+
+[tools]
+
+# Installed at image build time. This is all bb itself needs to run.
+#
+# NOTE: node's version is duplicated as NODE_VERSION in the Containerfile, and the
+# two have to stay in sync. The layer that installs node sits above the COPY of
+# this file, because a layer cannot both install node and depend on the file that
+# declares it. That separation is what stops a toolset edit from re-downloading
+# node and reinstalling bb. The build asserts the versions match and fails with a
+# readable error if they drift, so bump both together.
+node = "24.21.0"
+
+# First use only. Bootstrap shims are created at build time and install
+# these on first invocation.
+ruby = { version = "4.0.6", lazy = true }
+bun = { version = "1.4.2", lazy = true }
+go = { version = "1.27.1", lazy = true }
+rust = { version = "1.98.1", lazy = true }
+python = { version = "3.14.7", lazy = true }
+gh = { version = "2.100.0", lazy = true }
+
+# Coding agent CLIs. Deliberately unpinned: `latest` resolves when the shim
+# first runs, so a fresh container pulls the current release rather than a stale
+# bake. bb dispatches to whichever of these you have authenticated.
+claude   = { version = "latest", lazy = true }
+codex    = { version = "latest", lazy = true }
+pi       = { version = "latest", lazy = true }
+opencode = { version = "latest", lazy = true }
+grok     = { version = "latest", lazy = true }
+oh-my-pi = { version = "latest", lazy = true }
