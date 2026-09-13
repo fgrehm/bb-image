@@ -89,6 +89,36 @@ make run MOUNTS='-v ~/.config/git:/home/developer/.config/git \
 
 Mounting the host's agent config means the container's CLI version writes state that your host CLI also reads. That is normally fine and occasionally not, so if a provider starts misbehaving, drop its mount and log in inside the container instead.
 
+## Using this image as a base
+
+The image is meant to be layered on. `/opt/mise`, the mise data dir, is owned by and writable by `developer`, so a derived image can add tools with `mise install` or `npm install -g` and they behave like the baked ones.
+
+Run those as `developer`, which is the image's default user. If a `Containerfile` needs `USER root` for `apt-get`, a `chmod` or a `chown`, switch back with `USER developer` before any install:
+
+```dockerfile
+FROM ghcr.io/fgrehm/bb:0.43.1
+
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends your-tool \
+    && rm -rf /var/lib/apt/lists/*
+
+USER developer
+RUN mise install <tool> && mise reshim --force
+```
+
+A `mise install` run as `root` writes root-owned directories under `/opt/mise`, and `developer` cannot add versions to them afterwards. There is no permission fix for that which survives the image build, so keep installs as `developer`. The build asserts the `/opt/mise` ownership invariant, so a regression on the base side fails before it ships.
+
+To replace the baked toolset rather than extend it, point `MISE_GLOBAL_CONFIG_FILE` at your own file. That replaces the global config at `/opt/mise/config.toml`; the two are not merged. Pin versions there when the derived image has to work without the network:
+
+```dockerfile
+COPY --chown=developer:developer my-tools.toml /opt/my-tools.toml
+ENV MISE_GLOBAL_CONFIG_FILE=/opt/my-tools.toml
+USER developer
+RUN mise install && mise reshim --force
+```
+
+Pinning is what removes the network round trip: a pinned version that is already installed runs offline. `MISE_OFFLINE=1` goes further and blocks HTTP entirely, turning a missing tool into a hard failure at the point of use. `MISE_LOCKED=1` with a `mise lock` lockfile does the same for `mise install`. Neither silences the resolution warnings for any unpinned `latest` tools left in the config, so pin or drop those as well if the derived image has to be quiet and fully offline.
+
 ## Running as a microVM
 
 [smolvm](https://smolmachines.com) boots images as libkrun microVMs with their own guest kernel. This image is consumed as-is, because a Smolfile's `image` field takes an OCI reference, a `podman save` archive, or an unpacked rootfs, so nothing needs repackaging.

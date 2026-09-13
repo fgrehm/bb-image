@@ -342,8 +342,8 @@ RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=04
     done; \
     HOME=/tmp vi --version | head -1
 
-# Last RUN in the image, and the guard on the forwarded token. It runs here so that it
-# sees every layer above it, and as root so that it can read /root too. grep reads the
+# Last RUN as root, and the guard on the forwarded token. It runs after every layer
+# that handles the token, and as root so that it can read /root too. grep reads the
 # token with -f, so the value never appears in an argument list, and only file paths are
 # ever printed. A match means the token reached disk, which would put it in the image and
 # in every volume seeded from it, so the build stops instead of shipping.
@@ -367,6 +367,22 @@ RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=04
     fi
 
 USER $USERNAME
+
+# The invariant derived images depend on: the mise data dir is developer-owned and
+# writable, so a derived image can add tools with `mise install` or `npm install -g` and
+# they stay usable, exactly like the baked ones. This runs as developer, after every
+# layer, so a future root layer that breaks the ownership fails the build rather than
+# shipping. It cannot be enforced against `USER root` in a derived image: a root-run
+# install still writes root-owned directories, and no permission mechanism survives the
+# image build to repair that. See README, "Using this image as a base".
+RUN set -e; \
+    test -w /opt/mise/installs; \
+    test -w /opt/mise/shims; \
+    test -w "/opt/mise/installs/node/${NODE_VERSION}/lib/node_modules"; \
+    probe="/opt/mise/installs/.writable-probe"; \
+    touch "$probe"; \
+    rm "$probe"; \
+    echo "mise data dir writable by $(id -un)"
 
 # Default to serving bb, with the entrypoint forwarding signals so `podman stop`
 # is a clean shutdown. Override with a command to get a shell instead:
