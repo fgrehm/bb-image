@@ -112,12 +112,37 @@ USER $USERNAME
 # rather than a single mount point. Mount a tree under it (see the Makefile).
 WORKDIR /home/${USERNAME}
 
+# GitHub token, optional. mise resolves versions and verifies artifact attestations
+# through api.github.com, which serves 60 requests per hour unauthenticated against 1000
+# with a token, so builds fail intermittently without one.
+#
+# The token arrives as a BuildKit secret and lives only for the duration of a RUN. It is
+# never a build arg and never an ENV, because both persist in image metadata, and it is
+# never echoed, because podman does not redact secrets from build output the way BuildKit
+# does. The file form is deliberate: reading it with `cat` and matching it with `grep -f`
+# keeps the value out of every process argument list. required=false keeps an ordinary
+# local build, with no token at all, working.
+#
+# uid, gid and mode are load-bearing here (or rather, they matter). The toolset RUNs run as
+# the unprivileged developer, and a secret mounted with default permissions is unreadable
+# to it. `cat` then fails inside a command substitution, which does not trip `set -e`, so
+# the build continues with an empty token and mise quietly stays unauthenticated. That
+# failure mode looks exactly like the rate limiting it was meant to fix. Keep 1000 in step
+# with USER_UID.
+#
+# The final RUN greps the whole filesystem for the token and fails the build if it is
+# anywhere on disk.
+
 # node is the runtime the image is built around, so it is installed from an
 # explicit version rather than read out of mise.toml. That means the version is
 # named twice, here and in mise.toml, because a layer cannot both install node
 # and depend on the file that declares it. The check further down fails the
 # build if the two drift apart.
-RUN export npm_config_cache="$BUILD_SCRATCH/npm" \
+RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=0400 \
+    if [ -s /run/secrets/github_token ]; then \
+      export MISE_GITHUB_TOKEN="$(cat /run/secrets/github_token)"; \
+    fi; \
+    export npm_config_cache="$BUILD_SCRATCH/npm" \
            XDG_CACHE_HOME="$BUILD_SCRATCH/cache" \
            XDG_STATE_HOME="$BUILD_SCRATCH/state"; \
     mise install \
@@ -130,7 +155,11 @@ RUN export npm_config_cache="$BUILD_SCRATCH/npm" \
 # three bb depends on have to be allowed explicitly or bb will not work:
 # @parcel/watcher, better-sqlite3, and node-pty are compiled or fetched here.
 ARG BB_VERSION=0.43.1
-RUN export npm_config_cache="$BUILD_SCRATCH/npm" \
+RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=0400 \
+    if [ -s /run/secrets/github_token ]; then \
+      export MISE_GITHUB_TOKEN="$(cat /run/secrets/github_token)"; \
+    fi; \
+    export npm_config_cache="$BUILD_SCRATCH/npm" \
            XDG_CACHE_HOME="$BUILD_SCRATCH/cache" \
            XDG_STATE_HOME="$BUILD_SCRATCH/state"; \
     npm install -g \
@@ -149,7 +178,11 @@ RUN export npm_config_cache="$BUILD_SCRATCH/npm" \
 # root, which the toolset layers deliberately are not.
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
 ARG PLAYWRIGHT_VERSION=1.63.0
-RUN export npm_config_cache="$BUILD_SCRATCH/npm" \
+RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=0400 \
+    if [ -s /run/secrets/github_token ]; then \
+      export MISE_GITHUB_TOKEN="$(cat /run/secrets/github_token)"; \
+    fi; \
+    export npm_config_cache="$BUILD_SCRATCH/npm" \
            XDG_CACHE_HOME="$BUILD_SCRATCH/cache" \
            XDG_STATE_HOME="$BUILD_SCRATCH/state"; \
     npm install -g "playwright@${PLAYWRIGHT_VERSION}" \
@@ -197,7 +230,11 @@ COPY --chown=$USERNAME:$USERNAME mise.toml /opt/mise/config.toml
 # volume, and a cache committed to a layer stays in the image even after a later layer
 # deletes it. The rm has to follow node and bb, because those go through shims and run
 # mise again, which recreates the state directory.
-RUN set -e; \
+RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=0400 \
+    set -e; \
+    if [ -s /run/secrets/github_token ]; then \
+      export MISE_GITHUB_TOKEN="$(cat /run/secrets/github_token)"; \
+    fi; \
     export npm_config_cache="$BUILD_SCRATCH/npm" \
            XDG_CACHE_HOME="$BUILD_SCRATCH/cache" \
            XDG_STATE_HOME="$BUILD_SCRATCH/state"; \
@@ -255,7 +292,15 @@ RUN printf '%s\n' \
 # shim under its real name instead. mise's neovim declares bins = ["nvim"], so no
 # vim/vi shim exists to shadow these, and the loop refuses to continue if that ever
 # changes. See AGENTS.md before replacing this with a symlink.
-RUN set -e; \
+# This RUN also has to mount the token. `vi --version` goes through a shim, which runs
+# mise, which resolves every unpinned `latest` tool in the config against the GitHub API.
+# Without the mount this one smoke test produced 34 rate-limit warnings and 11
+# `github auth: no` lines while the four RUNs that do mount it stayed quiet.
+RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=0400 \
+    set -e; \
+    if [ -s /run/secrets/github_token ]; then \
+      export MISE_GITHUB_TOKEN="$(cat /run/secrets/github_token)"; \
+    fi; \
     for name in vi vim; do \
       if [ -e "/opt/mise/shims/$name" ]; then \
         echo "refusing to shadow the $name shim with the neovim wrapper" >&2; \
@@ -268,6 +313,30 @@ RUN set -e; \
       chmod 0755 "/usr/local/bin/$name"; \
     done; \
     HOME=/tmp vi --version | head -1
+
+# Last RUN in the image, and the guard on the forwarded token. It runs here so that it
+# sees every layer above it, and as root so that it can read /root too. grep reads the
+# token with -f, so the value never appears in an argument list, and only file paths are
+# ever printed. A match means the token reached disk, which would put it in the image and
+# in every volume seeded from it, so the build stops instead of shipping.
+#
+# This cannot see bytes in a lower layer that a later layer deleted, since that content
+# is whiteouted rather than removed. The sentinel procedure in AGENTS.md covers that case
+# and is the only check that decompresses the layers themselves.
+RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=0400 \
+    if [ -s /run/secrets/github_token ]; then \
+      hits="$(grep -rlF --binary-files=text -f /run/secrets/github_token / \
+                --exclude-dir=proc --exclude-dir=sys --exclude-dir=dev \
+                --exclude-dir=run 2>/dev/null | head -5)"; \
+      if [ -n "$hits" ]; then \
+        echo "build token found on disk, refusing to ship:" >&2; \
+        echo "$hits" >&2; \
+        exit 1; \
+      fi; \
+      echo "token leak check: no matches on disk"; \
+    else \
+      echo "token leak check: skipped, no token supplied"; \
+    fi
 
 USER $USERNAME
 

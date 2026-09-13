@@ -14,7 +14,7 @@ Nothing heavy lives in `$HOME` at first boot. The toolchain is at `/opt/mise` an
 
 ## Commands
 
-- `make build` builds `bb:dev`. Layers are cached, so a `mise.toml`-only change is quick.
+- `make build` builds `bb:dev`. Layers are cached, so a `mise.toml`-only change is quick. It forwards a GitHub token when one is available, from `GH_TOKEN`, `GITHUB_TOKEN`, or `gh auth token`, which authenticates mise's API calls and stops the build tripping GitHub's unauthenticated rate limit.
 - `make hack` opens a shell in the image, with the same volume as `run`.
 - `make run` serves bb with persistent state.
 
@@ -46,6 +46,9 @@ There is no test suite. Verification means building the image and exercising it.
 - bb routes service output to `~/.bb/logs/*`. Anything that replaces the entrypoint must keep that visible.
 - mise's shims are symlinks to the `mise` binary and it dispatches on the tool name in `argv[0]`. So `vi` and `vim` are wrapper scripts in `/usr/local/bin` that `exec nvim "$@"`, not symlinks to `/opt/mise/shims/nvim`. A symlink reached as `vim` fails with "vim is not a valid shim". Nothing shadows the wrappers because mise's neovim declares `bins = ["nvim"]`, and the build refuses to continue if a `vi` or `vim` shim ever appears.
 - mise writes into `$HOME` if nothing redirects it: `~/.cache/sigstore-rust` from verifying the aqua-backed tools, and `~/.local/state/mise`. Neither `MISE_CACHE_DIR` nor a pinned state directory covers the sigstore one, which follows `XDG_CACHE_HOME`. `$BUILD_SCRATCH` handles both during the build, and the toolset `RUN` still ends with an `rm -rf` of `~/.cache` and `~/.local` as a guard. That `rm` stays last in the `RUN`, because `node --version` and `bb --version` go through shims and run mise again.
+- The build token is forwarded as a BuildKit secret, and the mount needs `uid=1000,gid=1000,mode=0400`. The toolset RUNs run as the unprivileged `developer`, and a secret mounted with default permissions is unreadable to it. `cat` then fails inside a command substitution, which does not trip `set -e`, so the build carries on with an empty token and mise stays unauthenticated while looking exactly like the rate limiting the token was meant to fix. Keep that uid in step with `USER_UID`.
+- The token must never be a build arg or an `ENV`, both of which persist in image metadata, and must never be echoed: podman does not redact secrets from build output the way BuildKit does. The last RUN in the image greps the whole filesystem for it and fails the build if it is anywhere on disk.
+- That filesystem guard cannot see bytes in a lower layer that a later layer deleted, since the content is whiteouted rather than removed. Verified: a leak written in one RUN and deleted in the next is invisible to the guard and still present in the saved image. The sentinel scan below is the only check that catches it.
 - Debian's `/etc/profile` resets `PATH`, which drops the mise shims, so `bash -l` and anything bb spawns through a login shell loses every lazy tool. `/etc/profile.d/mise-shims.sh` puts them back. zsh does not need it: `/etc/zsh/zshenv` only sets `PATH` when it is empty, so the image's `ENV PATH` survives, and `~/.zshrc` carries `mise activate zsh` for interactive use. zsh is not the default shell for `developer`; `useradd` sets bash.
 
 ## Releasing
@@ -107,6 +110,20 @@ No build-time cache should survive into the image, while runtime caches should l
 podman run --rm bb:dev /bin/bash -c 'ls -d /opt/npm-cache /opt/mise/cache 2>/dev/null || echo "no build caches, correct"'
 podman run --rm bb:dev /bin/bash -c 'gh --version >/dev/null 2>&1; find /home/developer/.cache -mindepth 1 -maxdepth 1'
 ```
+
+The token check. There are two halves, and the guard in the image only covers one of them, so
+build with a sentinel and scan the saved archive, which sees whiteouted bytes as well:
+
+```bash
+SENT='ghp_sentinel_donotleak_0123456789abcdef'
+make build GH_TOKEN="$SENT"
+podman save bb:dev -o /tmp/img.tar && mkdir -p /tmp/img.x && tar -xf /tmp/img.tar -C /tmp/img.x
+grep -rlF "$SENT" /tmp/img.x | head    # expect no output
+rm -rf /tmp/img.tar /tmp/img.x
+```
+
+The build's own guard should print `token leak check: no matches on disk`, or
+`skipped, no token supplied` when there is no token. Both are a pass.
 
 Check that shutdown is still clean. Wait for bb to finish starting first. The entrypoint
 forwards SIGTERM to bb, and a bb that has not installed its handler yet dies to the

@@ -33,13 +33,32 @@ MOUNTS ?=
 # what makes mounting your code work. Override with USERNS= when using docker.
 USERNS ?= --userns=keep-id
 
+# Forward a GitHub token so mise's API calls are authenticated. Unauthenticated, mise
+# gets 60 requests per hour against 1000 with a token, which is the difference between an
+# intermittent attestation failure and a clean build.
+#
+# Lookup order: an explicit GH_TOKEN, then GITHUB_TOKEN, then whatever `gh auth token` has
+# cached locally. The gh call is deferred, so it only happens when a build expands the
+# flag, and its output goes into the environment rather than onto a command line.
+#
+# Exported so podman can read it from its own environment, and handed over as `type=env`,
+# so the value never reaches a command line, make's echoed recipe, or the image. With no
+# token the build runs unauthenticated, which is fine on a quiet IP and flaky elsewhere.
+# Only `build` uses this; `run` and `hack` do not build.
+GH_TOKEN ?= $(or $(GITHUB_TOKEN),$(shell gh auth token 2>/dev/null))
+export GH_TOKEN
+# The value holds commas, so it stays out of the $(if) call itself: make splits the
+# then-branch on them otherwise, which silently truncates the flag.
+GH_TOKEN_SECRET = --secret id=github_token,type=env,env=GH_TOKEN
+BUILD_SECRET = $(if $(GH_TOKEN),$(GH_TOKEN_SECRET))
+
 # Extra flags, e.g. RUN_ARGS='-v ~/src:/home/developer/src:Z'
 RUN_ARGS ?=
 
 .PHONY: build hack run release
 
 build:
-	$(ENGINE) build -t $(IMAGE):$(TAG) .
+	$(ENGINE) build -t $(IMAGE):$(TAG) $(BUILD_SECRET) .
 
 hack:
 	$(ENGINE) run --rm -it $(USERNS) $(VOLUMES) $(MOUNTS) $(RUN_ARGS) $(IMAGE):$(TAG) /bin/bash

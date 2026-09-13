@@ -98,6 +98,12 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             BB_VERSION=${{ env.BB_VERSION }}
+          # Authenticates mise's GitHub API calls, which otherwise run unauthenticated at
+          # 60 requests per hour and fail attestation verification intermittently. The
+          # Containerfile mounts this as a BuildKit secret and never writes it to a layer;
+          # the final RUN fails the build if it turns up on disk anywhere.
+          secrets: |
+            github_token=${{ secrets.GITHUB_TOKEN }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: true
