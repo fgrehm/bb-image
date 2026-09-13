@@ -21,6 +21,12 @@ ARG DEBIAN_FRONTEND=noninteractive
 # own reference sandbox image installs it first, ahead of git, curl and the agents. It
 # needs unprivileged user namespaces, which podman's default seccomp permits under
 # --userns=keep-id. See the notes in AGENTS.md before changing the run flags.
+#
+# imagemagick is for image work that comes up constantly around screenshots and generated
+# assets, and it is what the MiniMagick Ruby gem shells out to. --no-install-recommends
+# keeps it near 23MB by skipping the delegate zoo. The cost of that is real and worth
+# knowing: without the recommends there is no ghostscript, so PDF and PostScript cannot be
+# read, and Debian's policy.xml restricts some formats regardless.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
                        build-essential \
@@ -29,6 +35,7 @@ RUN apt-get update \
                        curl \
                        git \
                        gnupg \
+                       imagemagick \
                        less \
                        libpq-dev \
                        libsqlite3-dev \
