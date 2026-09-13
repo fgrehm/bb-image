@@ -27,27 +27,41 @@ ARG DEBIAN_FRONTEND=noninteractive
 # keeps it near 23MB by skipping the delegate zoo. The cost of that is real and worth
 # knowing: without the recommends there is no ghostscript, so PDF and PostScript cannot be
 # read, and Debian's policy.xml restricts some formats regardless.
+#
+# The document and asset tier, about 21MB together. poppler-utils is the answer to the gap
+# imagemagick leaves: pdftotext and pdftoppm read PDFs for 6MB where ghostscript costs 52MB
+# and brings a large parser along with it. file is libmagic, which agents reach for
+# constantly and which was missing entirely. qpdf handles PDF structure, webp gives cwebp
+# and dwebp, and pngquant, optipng and jpegoptim cover asset optimisation for under a
+# megabyte each.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
                        build-essential \
                        bubblewrap \
                        ca-certificates \
                        curl \
+                       file \
                        git \
                        gnupg \
                        imagemagick \
+                       jpegoptim \
                        less \
                        libpq-dev \
                        libsqlite3-dev \
                        libssl-dev \
                        openssh-client \
+                       optipng \
                        pkg-config \
+                       pngquant \
+                       poppler-utils \
                        postgresql-client \
                        procps \
                        python3 \
+                       qpdf \
                        rsync \
                        sqlite3 \
                        unzip \
+                       webp \
                        wget \
                        zlib1g-dev \
                        zsh \
