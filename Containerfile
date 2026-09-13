@@ -15,9 +15,16 @@ ARG DEBIAN_FRONTEND=noninteractive
 # The rest are the gaps an agent host feels immediately: procps is `ps`, less is
 # git's pager, unzip is assumed by installers, pkg-config is needed by native builds
 # that build-essential does not cover, and gnupg is commit signing.
+#
+# bubblewrap is what agents sandbox themselves with: Claude Code's bash sandbox shells out
+# to `bwrap` (and can be pointed at it with CLAUDE_CODE_BUBBLEWRAP / bwrapPath), and bb's
+# own reference sandbox image installs it first, ahead of git, curl and the agents. It
+# needs unprivileged user namespaces, which podman's default seccomp permits under
+# --userns=keep-id. See the notes in AGENTS.md before changing the run flags.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
                        build-essential \
+                       bubblewrap \
                        ca-certificates \
                        curl \
                        git \
