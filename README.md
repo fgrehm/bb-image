@@ -41,7 +41,7 @@ make run     # serves bb on http://localhost:38886
 make hack    # shell in the same environment
 ```
 
-bb's default port is 38886. If something else on your machine already owns it, pass another: `make run BB_PORT=39886`.
+bb's default port is 38886. If something else on your machine already owns it, pass another: `make run BB_PORT=39886`. It is published on `127.0.0.1` only, so it is not reachable from other machines; `make run BB_BIND=0.0.0.0` changes that, and then you should reach it by IPv4 address rather than `localhost` for the reason in the gotchas.
 
 ### The same thing without make
 
@@ -49,7 +49,7 @@ bb's default port is 38886. If something else on your machine already owns it, p
 podman run -d --name bb \
   --userns=keep-id \
   --security-opt no-new-privileges \
-  -p 38886:38886 \
+  -p 127.0.0.1:38886:38886 \
   -v bb-home:/home/developer \
   -v "$HOME/src:/home/developer/src:Z" \
   bb:dev
@@ -153,6 +153,7 @@ The image is built for `linux/amd64` only. `linux/arm64` is untested: `node-pty`
 - Only small tools are left to first use. Since the toolchain lives in the image rather than a volume, a runtime-installed tool is gone once the container is recreated and is re-fetched on next use. The dev tools are the exception: they are baked because they are used constantly, so the re-fetch would happen in every fresh container.
 - A login shell keeps the lazy tools. Debian's `/etc/profile` resets `PATH` outright, which used to drop the mise shims and make every lazy tool "command not found" under `bash -l`. `/etc/profile.d/mise-shims.sh` puts them back. zsh never had the problem, since `/etc/zsh/zshenv` only sets `PATH` when it is empty.
 - `bwrap` is installed for agent sandboxing: Claude Code's bash sandbox shells out to it, and bb's own reference sandbox image installs it first. It is not setuid, and it runs unprivileged because podman's default seccomp permits user namespaces under `--userns=keep-id`.
+- `make run` publishes bb on `127.0.0.1` only, via `BB_BIND`. That is deliberate: a wildcard publish makes pasta listen dual-stack, and on this podman and pasta (`6.1.1` with `2026_07_28.f8df3f1`) IPv6 connections are reset while IPv4 works. Since `localhost` resolves to `::1` first, clients fail rather than falling back, so `http://localhost:38886` looks broken even though the port is fine. Bound to `127.0.0.1` there is no IPv6 listener and `localhost` works. Set `BB_BIND=0.0.0.0` to expose bb on the LAN, then use the IPv4 address. `--network=host` is the fallback if a rootless networking setup misbehaves in some other way.
 - `--security-opt no-new-privileges` is set by `make run` and `make hack`. The image inherits the usual Debian setuid binaries from its base packages (`su`, `mount`, `passwd`, `chsh`, `chfn`, `gpasswd`, `newgrp`, `umount`, and openssh's `ssh-keysign`) and none of them serves this image's purpose, so `NO_NEW_PRIVS` makes setuid and file capabilities unable to elevate. Verified: `/proc/self/status` reports `NoNewPrivs: 1`, bubblewrap still works because creating a namespace is not a privilege gain, and bb starts and stops cleanly. It is a run-behaviour change, so it counts as a major bump if you are versioning this image.
 - One sandbox limitation is unavoidable inside a container. Mounting a fresh `/proc` together with PID-namespace unsharing fails with `Can't mount proc on /proc: Operation not permitted`, and `--privileged` is the only thing measured to lift it. `seccomp=unconfined`, `apparmor=unconfined`, `label=disable` and `--cap-add SYS_ADMIN` do not help, and bwrap refuses to start with extra capabilities anyway (`Unexpected capabilities but not setuid`). Workarounds that do work: reuse the parent's `/proc` with `--ro-bind /proc /proc`, or drop the PID namespace. `make run` deliberately does not pass `--privileged`.
 - `pnpm` is on hand for projects that want it, and it is lazy, since bb itself never uses it: bb detects package managers only to report them and installs its plugins with npm. The store lives at `~/.local/share/pnpm/store`, inside the home volume, so repeat installs are fast and survive a container recreate. Projects that hard-link from the host are the exception, since a bind mount is a different filesystem and pnpm falls back to copying. pnpm 10 and later also refuse to run dependency lifecycle scripts unless they are allow-listed, so a native dependency can install cleanly and still be broken; `pnpm approve-builds` fixes it.

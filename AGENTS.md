@@ -52,6 +52,7 @@ There is no test suite. Verification means building the image and exercising it.
 - The token must never be a build arg or an `ENV`, both of which persist in image metadata, and must never be echoed: podman does not redact secrets from build output the way BuildKit does. The last RUN in the image greps the whole filesystem for it and fails the build if it is anywhere on disk.
 - That filesystem guard cannot see bytes in a lower layer that a later layer deleted, since the content is whiteouted rather than removed. Verified: a leak written in one RUN and deleted in the next is invisible to the guard and still present in the saved image. The sentinel scan below is the only check that catches it.
 - bubblewrap is installed for agent sandboxing and is deliberately not setuid. It works under podman's default seccomp, because unprivileged user namespaces are permitted there, but a fresh `--proc` mount combined with PID-namespace unsharing fails inside the container with `Can't mount proc on /proc: Operation not permitted`. Only `--privileged` lifts that. `--security-opt seccomp=unconfined`, `apparmor=unconfined`, `label=disable` and `--cap-add SYS_ADMIN` all fail to, and bwrap will not start with extra capabilities anyway (`Unexpected capabilities but not setuid`). Do not add `--privileged` to `make run` without deciding to give up the container's isolation. This is specific to containers: the same command works in a smolvm microVM, where there is no nesting, so do not carry the workaround over there.
+- Publishing bb's port on every interface breaks `localhost` on this podman and pasta (6.1.1 with 2026_07_28.f8df3f1). A wildcard publish makes pasta listen dual-stack, IPv6 connections are reset while IPv4 works, and `localhost` resolves to `::1` first, so clients fail against a port that is genuinely open. That is why `make run` publishes `127.0.0.1`, via `BB_BIND`; it also keeps bb off the LAN, which suits a local single-user tool. Set `BB_BIND=0.0.0.0` on purpose and reach it by IPv4 address. `--network=host` is the fallback for other rootless networking problems.
 - Debian's `/etc/profile` resets `PATH`, which drops the mise shims, so `bash -l` and anything bb spawns through a login shell loses every lazy tool. `/etc/profile.d/mise-shims.sh` puts them back. zsh does not need it: `/etc/zsh/zshenv` only sets `PATH` when it is empty, so the image's `ENV PATH` survives, and `~/.zshrc` carries `mise activate zsh` for interactive use. zsh is not the default shell for `developer`; `useradd` sets bash.
 
 ## Releasing
@@ -144,7 +145,7 @@ default action, so a stop issued during startup reports 143 on any revision, inc
 revisions that were never touched:
 
 ```bash
-podman run -d --name bbtest -p 39999:38886 --userns=keep-id bb:dev
+podman run -d --name bbtest -p 127.0.0.1:39999:38886 --userns=keep-id bb:dev
 until podman logs bbtest 2>&1 | grep -q "Host daemon started"; do sleep 1; done
 podman stop -t 20 bbtest   # then confirm exit code 0, not 143 or 137
 ```

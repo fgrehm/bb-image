@@ -9,6 +9,14 @@ BB_VERSION := $(shell sed -n 's/^ARG BB_VERSION=\(.*\)/\1/p' Containerfile)
 # Host port for the bb server. Override when something else already owns 38886,
 # e.g. `make run BB_PORT=39886`.
 BB_PORT ?= 38886
+
+# Interface to publish bb on. Loopback by default, for two reasons: bb is a local
+# single-user tool, and publishing on every interface breaks `localhost` here.
+# A wildcard publish makes pasta listen dual-stack, IPv6 connections get reset, and
+# `localhost` resolves to ::1 first, so clients fail instead of falling back to
+# IPv4. Bound to 127.0.0.1 there is no IPv6 listener, so `localhost` works. Set
+# BB_BIND=0.0.0.0 to expose bb on the LAN, and reach it by IPv4 address.
+BB_BIND ?= 127.0.0.1
 # Container name, so `podman stop bb` works and shutdown stays clean.
 NAME ?= bb
 
@@ -78,7 +86,7 @@ run:
 		--name $(NAME) \
 		$(USERNS) \
 		$(SECURITY_OPTS) \
-		-p $(BB_PORT):38886 \
+		-p $(BB_BIND):$(BB_PORT):38886 \
 		$(VOLUMES) \
 		$(MOUNTS) \
 		$(RUN_ARGS) \
