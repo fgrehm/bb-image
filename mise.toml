@@ -43,6 +43,17 @@ rust = { version = "1.98.1", lazy = true }
 python = { version = "3.14.7", lazy = true }
 gh = { version = "2.100.0", lazy = true }
 
+# pnpm is here because agents meet pnpm projects, not because bb uses it. bb detects
+# package managers to report them and installs its plugins with npm, never pnpm. The
+# registry entry declares detect = ["pnpm-lock.yaml", "pnpm-workspace.yaml"], so mise
+# recognises a pnpm project on its own.
+#
+# The version barely matters: current pnpm defaults pmOnFail to `download`, so it fetches
+# and runs whatever version a project declares in packageManager. Note that pnpm 10 and
+# later refuse to run dependency lifecycle scripts unless they are allow-listed, which is
+# why a native dependency can install cleanly and still be broken. `pnpm approve-builds`.
+pnpm = { version = "12.4.1", lazy = true }
+
 # Pre-commit hooks. Deliberately unpinned.
 prek = { version = "latest", lazy = true }
 
