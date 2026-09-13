@@ -9,7 +9,7 @@ Container image for running [bb](https://getbb.app). `README.md` describes it fo
 - `scripts/entrypoint.sh` — PID 1 for the default command. Runs bb behind a log tail and forwards signals.
 - `Makefile` — `build`, `hack`, `run`, `release`.
 - `examples/smolvm/Smolfile` — a worked machine definition for running the image as a [smolvm](https://smolmachines.com) microVM.
-- `.github/workflows/publish.yml` — builds and pushes to GHCR on `main` and `v*` tags. On a tag it emits both axes: the bb version from the Containerfile and `img-<tag>` for the image itself.
+- `.github/workflows/publish.yml` — builds and pushes to GHCR on `main` and `v*` tags. On a tag it emits both axes: the bb version from the Containerfile and `img-<tag>` for the image itself. A `main` push that only touches markdown, `examples/`, `LICENSE` or `.gitignore` skips the build; path filters are not evaluated for tag pushes, so a release always builds.
 
 Nothing heavy lives in `$HOME` at first boot. The toolchain is at `/opt/mise` and Playwright's browsers at `/opt/ms-playwright`. Caches are meant to be in `$HOME`: nothing pins a cache location, so at runtime npm writes `~/.npm` and mise writes `~/.cache/mise`, inside the home volume, where they survive a recreate.
 
