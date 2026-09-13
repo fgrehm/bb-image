@@ -69,6 +69,27 @@ Two version axes. The bb release comes from `BB_VERSION` in the Containerfile; t
 
 A prerelease suffix such as `0.3.0-rc1` publishes `img-0.3.0-rc1` and nothing else. The bb aliases and `latest` are gated on stable tags, because otherwise an rc would silently become what people pull.
 
+## Keeping the changelog
+
+`CHANGELOG.md` is the user-facing record of what changed. It exists so someone can decide whether to pull a new tag without reading `git log`, which means the test for an entry is "would a user of this image notice?"
+
+Write an entry when a change:
+
+- adds or removes a tool, package, or baked file
+- moves a version: bb, node, mise, Playwright, or the base digest
+- changes how the image is run, meaning flags, ports, volumes, working directory, or the security posture
+- changes the image size in either direction
+- fixes something a user could have hit, including a broken port, a missing shim, or a confusing failure
+
+Do not log internal churn. Refactors, comment edits, doc rewrites, and workflow tidy-ups get no entry unless they change what a user gets. The cache rework earned an entry because it moved 170MB and changed where caches live; renaming a variable would not.
+
+Practical rules:
+
+- Put entries under `## [Unreleased]`, newest release first, using the Keep a Changelog headings: Added, Changed, Deprecated, Removed, Fixed, Security. `Known limitations` is used here too, since a first release has more of those than most projects.
+- `make release` does not write the changelog. When releasing, rename `## [Unreleased]` to `## [<version>] - <YYYY-MM-DD>` and start a fresh empty `Unreleased` above it, in the same commit as the tag.
+- Name the bb version whenever `BB_VERSION` moves. The changelog tracks the image's own version; bb rides its own axis, and an entry that says "carries bb 0.43.1" answers the question people actually have.
+- Describe the effect on the user, not the implementation. "Reading PDFs now works through poppler" beats "added poppler-utils to the apt list".
+
 ## Verifying a change
 
 ```bash
