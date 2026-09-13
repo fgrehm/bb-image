@@ -33,6 +33,14 @@ MOUNTS ?=
 # what makes mounting your code work. Override with USERNS= when using docker.
 USERNS ?= --userns=keep-id
 
+# Neutralises setuid and file capabilities inside the container, so nothing in the image
+# can elevate. The base packages bring the standard Debian setuid set (su, mount, passwd,
+# chsh, chfn, gpasswd, newgrp, umount, and openssh's ssh-keysign) and none of it serves
+# this image's purpose, so agents should not be able to parlay it into container root.
+# Bubblewrap is unaffected, because creating a user namespace is not a privilege gain.
+# Override with SECURITY_OPTS= if you need su inside.
+SECURITY_OPTS ?= --security-opt no-new-privileges
+
 # Forward a GitHub token so mise's API calls are authenticated. Unauthenticated, mise
 # gets 60 requests per hour against 1000 with a token, which is the difference between an
 # intermittent attestation failure and a clean build.
@@ -61,7 +69,7 @@ build:
 	$(ENGINE) build -t $(IMAGE):$(TAG) $(BUILD_SECRET) .
 
 hack:
-	$(ENGINE) run --rm -it $(USERNS) $(VOLUMES) $(MOUNTS) $(RUN_ARGS) $(IMAGE):$(TAG) /bin/bash
+	$(ENGINE) run --rm -it $(USERNS) $(SECURITY_OPTS) $(VOLUMES) $(MOUNTS) $(RUN_ARGS) $(IMAGE):$(TAG) /bin/bash
 
 # Serves bb with the entrypoint in front, so SIGTERM from `podman stop` reaches
 # bb and it exits cleanly. Logs are tailed to the terminal by the entrypoint.
@@ -69,6 +77,7 @@ run:
 	$(ENGINE) run --rm \
 		--name $(NAME) \
 		$(USERNS) \
+		$(SECURITY_OPTS) \
 		-p $(BB_PORT):38886 \
 		$(VOLUMES) \
 		$(MOUNTS) \

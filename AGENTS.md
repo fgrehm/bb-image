@@ -31,6 +31,7 @@ There is no test suite. Verification means building the image and exercising it.
 - **Layer order has real consequences.** `COPY mise.toml` sits third from last on purpose. node, bb, and Playwright are installed above it, from `NODE_VERSION`, `BB_VERSION`, and `PLAYWRIGHT_VERSION`, so only the layers at or below the `COPY` depend on the toolset, and those are the only ones a toolset edit rebuilds. Moving the `COPY` earlier makes every toolset edit re-download everything.
 - **`NODE_VERSION` is duplicated on purpose.** It appears both here and in `mise.toml`, because a layer cannot both install node and depend on the file that declares it. A build step asserts the two agree and fails with a readable message; bumping it in only one place fails the build rather than shipping a mismatch.
 - **Agent CLIs and prek stay unpinned** (`version = "latest"`) so a fresh container resolves the current release. node, bb, and Playwright are pinned because they are baked.
+- **`make run` and `make hack` pass `--security-opt no-new-privileges`.** The base packages bring the standard Debian setuid binaries, including `su` and `mount`, and none of it serves this image's purpose, so agents should not be able to parlay any of it into container root. Bubblewrap is unaffected, since creating a user namespace is not a privilege gain. Override with `SECURITY_OPTS=` when `su` is genuinely needed. Changing the run flags this way is a major bump under the table below.
 - **`WORKDIR` is `$HOME`, not a single mount point**, because bb hosts many projects and resolves them by path.
 - **One volume, the whole home directory** (`bb-home`). Provider logins, git config, ssh keys, shell history, and bb state all persist with no per-CLI mount list. It is seeded from the image on first creation, and it stays small only because nothing heavy is in `$HOME`.
 - **`--userns=keep-id` is required for bind mounts under rootless podman.** Without it, container uid 1000 maps to a subuid and writes to a mounted project fail with permission denied.
@@ -59,7 +60,7 @@ Two version axes. The bb release comes from `BB_VERSION` in the Containerfile; t
 
 | Bump | Meaning |
 | --- | --- |
-| major | changes how the image is run: working directory, volume layout, ports |
+| major | changes how the image is run: working directory, volume layout, ports, security options |
 | minor | new tools, a node or mise bump, a base digest refresh |
 | patch | a bb version bump, or a fix that moves nothing else |
 
