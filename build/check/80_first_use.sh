@@ -7,7 +7,9 @@
 # first invocation, talks to the GitHub release API, and installs into the home
 # volume. go is small and exercises the whole path.
 say "first-use install of a lazy tool works"
-crun <<'SH'
+# crun is offline by default so baked-tool checks never refresh every unpinned
+# lazy tool. This concern exists to exercise the network install path.
+crun --env MISE_OFFLINE=0 <<'SH'
 set -eu
 go version
 SH

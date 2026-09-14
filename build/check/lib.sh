@@ -15,12 +15,14 @@ say() {
 
 # Boots the image and pipes the script on stdin (--interactive is not optional:
 # without it the engine gives bash empty stdin and bash -s exits 0 without
-# running anything, a silent pass). TOKEN_ARGS is deliberately word-split into
+# running anything, a silent pass). Checks use already-installed tools unless a
+# fragment explicitly opts back online, which stops every shim invocation from
+# refreshing the unpinned lazy tools. TOKEN_ARGS is deliberately word-split into
 # distinct --env flags; a GitHub token is [A-Za-z0-9_-]+, so no value needs
 # quoting, and any odd class must be passed as --env NAME=value here.
 crun() {
 	# shellcheck disable=SC2086
-	"$ENGINE" run --rm --interactive $TOKEN_ARGS "$@" "$img" /bin/bash -s
+	"$ENGINE" run --rm --interactive $TOKEN_ARGS --env MISE_OFFLINE=1 --env MISE_QUIET=1 "$@" "$img" /bin/bash -s
 }
 
 if [ -n "${GH_TOKEN:-}" ]; then
