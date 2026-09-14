@@ -41,7 +41,8 @@ Configs that use only plain version strings need no trust step; ones using `[set
 make build
 make run     # serves bb on http://localhost:38886
 make hack    # shell in the same environment
-make check   # verify the built image (release CI runs this before pushing)
+make check   # verify the built image
+make ci      # build + verify in one target (what release CI runs)
 ```
 
 bb's default port is 38886. If something else on your machine already owns it, pass another: `make run BB_PORT=39886`. It is published on `127.0.0.1` only, so it is not reachable from other machines; `make run BB_BIND=0.0.0.0` changes that, and then you should reach it by IPv4 address rather than `localhost` for the reason in the gotchas.

@@ -23,6 +23,7 @@ Nothing heavy lives in `$HOME` at first boot. The toolchain is at `/opt/mise` an
 
 - `make build` builds `bb:dev`. Layers are cached, so a `mise.toml`-only change is quick. It forwards a GitHub token when one is available, from `GH_TOKEN`, `GITHUB_TOKEN`, or `gh auth token`, which authenticates mise's API calls and stops the build tripping GitHub's unauthenticated rate limit.
 - `make check` is the verification harness and the only place assertions live: the Containerfile carries none. It runs build/check.sh against the built image, which includes container/fontconfig.sh for the fonts.conf drift guard. CI runs it before the push step, so a release cannot ship while any check fails. Forwarded token works the same way it does for build.
+- `make ci` is build + check as one target, the same two steps the publish workflow runs separately (its split exists only because buildx's GHA cache and the image attestations live in the build step; the check already runs against the self-same staged builder instance). Locally, use `make ci` and there is no ordering to get wrong.
 - `make fonts-regen` rewrites container/fonts.conf from the distro fontconfig inside the image, and validates the result with the drift guard before replacing the file.
 - `make hack` opens a shell in the image, with the same volume as `run`.
 - `make run` serves bb with persistent state.

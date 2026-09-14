@@ -71,7 +71,7 @@ BUILD_SECRET = $(if $(GH_TOKEN),$(GH_TOKEN_SECRET))
 # Extra flags, e.g. RUN_ARGS='-v ~/src:/home/developer/src:Z'
 RUN_ARGS ?=
 
-.PHONY: build check fonts-regen hack run release
+.PHONY: build check ci fonts-regen hack run release
 
 build:
 	$(ENGINE) build -f container/Containerfile -t $(IMAGE):$(TAG) $(BUILD_SECRET) .
@@ -84,6 +84,14 @@ build:
 # while anything here fails. Forwarded token works the same way it does for
 # build: GH_TOKEN, then GITHUB_TOKEN, then `gh auth token`.
 check:
+	IMAGE=$(IMAGE) TAG=$(TAG) ENGINE=$(ENGINE) build/check.sh
+
+# Build then verify, in one target: the sequence CI runs (its build and check
+# steps are separate because buildx's GHA cache and the image attestations live
+# in the build step, and the check must run against the self-same staged
+# artifact), but spelled once so nobody drifts between building and checking.
+# Use `make ci` locally; CI still splits only for the cache/attestation split.
+ci: build
 	IMAGE=$(IMAGE) TAG=$(TAG) ENGINE=$(ENGINE) build/check.sh
 
 # Regenerates container/fonts.conf from the distro fontconfig inside the image;
