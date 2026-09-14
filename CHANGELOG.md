@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-14
+
+Carries bb 0.43.1.
+
 ### Changed
 
 - Verification moved out of the Containerfile entirely. The image recipe now only builds; everything it used to assert at build time (fonts.conf drift against the distro file, the token leak scan, the writable mise dir) plus the behavioural checks (launch smoke, fontconfig parity, first-use installs, home size) run through `make check`, and the publish workflow refuses to push an image until every check passes. `make check` also lint-scripts the repo with the baked shfmt and shellcheck, so the repo's scripts are linted by the tools inside the image.
