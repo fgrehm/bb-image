@@ -6,6 +6,7 @@ set -eu
 
 : "${IMAGE:=bb}" "${TAG:=dev}" "${ENGINE:=podman}"
 img="$IMAGE:$TAG"
+TOKEN_ARGS=
 # root is defined by the runner; fragments use it.
 
 say() {

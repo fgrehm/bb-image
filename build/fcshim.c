@@ -14,11 +14,16 @@
 #include <dlfcn.h>
 #include <fcntl.h>
 #include <stdarg.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
 #include <unistd.h>
+
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
 
 static int logfd = -2;
 
@@ -37,7 +42,30 @@ static void note(const char *kind, const char *path) {
   syscall(SYS_write, logfd, line, n);
 }
 
-/* Only the paths this exercise is about, so the log stays readable. */
+/* Resolve *at paths before filtering. Fontconfig commonly opens cache files by
+ * basename relative to a directory fd, so inspecting the raw argument would
+ * silently miss writes under /var/cache/fontconfig. */
+static const char *absolute_path(int dirfd, const char *path, char *out, size_t size) {
+  if (!path || path[0] == '/') return path;
+
+  char base[PATH_MAX];
+  if (dirfd == AT_FDCWD) {
+    if (!getcwd(base, sizeof(base))) return path;
+  } else {
+    char link[64];
+    int n = snprintf(link, sizeof(link), "/proc/self/fd/%d", dirfd);
+    if (n < 0 || (size_t)n >= sizeof(link)) return path;
+    ssize_t got = readlink(link, base, sizeof(base) - 1);
+    if (got < 0) return path;
+    base[got] = '\0';
+  }
+
+  int n = snprintf(out, size, "%s/%s", base, path);
+  return n < 0 || (size_t)n >= size ? path : out;
+}
+
+/* Only the paths this exercise is about, so unrelated Chromium bookkeeping
+ * does not turn this into a gate on every write the browser makes. */
 static int interested(const char *path) {
   if (!path) return 0;
   if (strstr(path, ".uuid")) return 1;
@@ -53,21 +81,27 @@ typedef int (*openat_t)(int, const char *, int, ...);
 int chmod(const char *path, mode_t mode) {
   static chmod_t real;
   if (!real) real = (chmod_t)dlsym(RTLD_NEXT, "chmod");
-  if (interested(path)) note("chmod", path);
+  char resolved[PATH_MAX];
+  const char *absolute = absolute_path(AT_FDCWD, path, resolved, sizeof(resolved));
+  if (interested(absolute)) note("chmod", absolute);
   return real(path, mode);
 }
 
 int unlink(const char *path) {
   static unlink_t real;
   if (!real) real = (unlink_t)dlsym(RTLD_NEXT, "unlink");
-  if (interested(path)) note("unlink", path);
+  char resolved[PATH_MAX];
+  const char *absolute = absolute_path(AT_FDCWD, path, resolved, sizeof(resolved));
+  if (interested(absolute)) note("unlink", absolute);
   return real(path);
 }
 
 int unlinkat(int dirfd, const char *path, int flags) {
   static unlinkat_t real;
   if (!real) real = (unlinkat_t)dlsym(RTLD_NEXT, "unlinkat");
-  if (interested(path)) note("unlinkat", path);
+  char resolved[PATH_MAX];
+  const char *absolute = absolute_path(dirfd, path, resolved, sizeof(resolved));
+  if (interested(absolute)) note("unlinkat", absolute);
   return real(dirfd, path, flags);
 }
 
@@ -81,6 +115,8 @@ int openat(int dirfd, const char *path, int flags, ...) {
     mode = va_arg(ap, mode_t);
     va_end(ap);
   }
-  if ((flags & O_CREAT) && interested(path)) note("openat(O_CREAT)", path);
+  char resolved[PATH_MAX];
+  const char *absolute = absolute_path(dirfd, path, resolved, sizeof(resolved));
+  if ((flags & O_CREAT) && interested(absolute)) note("openat(O_CREAT)", absolute);
   return real(dirfd, path, flags, mode);
 }

@@ -4,4 +4,3 @@
 	compiled-in defaults, and warn about having done so.
 -->
 	<cachedir prefix="xdg">fontconfig</cachedir>
-

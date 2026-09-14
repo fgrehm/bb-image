@@ -1,7 +1,6 @@
-# Runs on every commit (and on CI) via prek / pre-commit. shellcheck and shfmt
-# are also enforced by the built image's own make check (which lints using the
-# tools baked inside the image); these hooks are for iterations in between, so a
-# push never lands with a script that make check would have to refuse.
+# Runs on every commit via prek / pre-commit. CI enforces the same shellcheck and
+# shfmt checks through the built image's make check; these hooks are for local
+# iterations, so a push never lands with a script that make check would refuse.
 repos:
   - repo: https://github.com/shellcheck-py/shellcheck-py
     rev: v0.11.0.1
@@ -10,7 +9,7 @@ repos:
         args: [-x]
         files: \.sh$
   - repo: https://github.com/scop/pre-commit-shfmt
-    rev: v3.14.1
+    rev: v3.14.1-1
     hooks:
       - id: shfmt
         args: ["-d"]

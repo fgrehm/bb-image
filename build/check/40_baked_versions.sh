@@ -9,6 +9,7 @@
 # the recipe pinned.
 say "baked versions match the Containerfile (bb, node, playwright)"
 bb_arg="$(sed -n 's/^ARG BB_VERSION=\(.*\)$/\1/p' "$root/container/Containerfile")"
+node_arg="$(sed -n 's/^ARG NODE_VERSION=\(.*\)$/\1/p' "$root/container/Containerfile")"
 pw_arg="$(sed -n 's/^ARG PLAYWRIGHT_VERSION=\(.*\)$/\1/p' "$root/container/Containerfile")"
 crun --env BB_VERSION="$bb_arg" --env NODE_VERSION="$node_arg" --env PLAYWRIGHT_VERSION="$pw_arg" <<'SH'
 set -eu

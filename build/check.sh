@@ -14,9 +14,31 @@ export root
 # shellcheck source=build/check/lib.sh
 . "$here/check/lib.sh"
 
-for fragment in "$here"/check/[0-9][0-9]_*.sh; do
-	# shellcheck source=/dev/null
-	. "$fragment"
+fragments='10_ignorefiles.sh
+20_versions.sh
+30_lint.sh
+40_baked_versions.sh
+50_shims.sh
+60_fontconfig.sh
+70_chromium.sh
+71_chromium_writes.sh
+80_first_use.sh
+90_mise_writable.sh
+95_token_scan.sh
+99_home_size.sh'
+
+printf '%s\n' "$fragments" | while IFS= read -r name; do
+	fragment="$here/check/$name"
+	[ -f "$fragment" ] || {
+		echo "required check fragment is missing: $name" >&2
+		exit 1
+	}
+	# Run each sourced fragment in its own shell. Variables and EXIT traps cannot
+	# leak into the next concern, while shared functions from lib.sh remain visible.
+	(
+		# shellcheck source=/dev/null
+		. "$fragment"
+	)
 done
 
 printf '\nall checks passed\n'
