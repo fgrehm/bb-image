@@ -41,4 +41,12 @@ printf '%s\n' "$fragments" | while IFS= read -r name; do
 	)
 done
 
+for fragment in "$here"/check/[0-9][0-9]_*.sh; do
+	name="$(basename "$fragment")"
+	printf '%s\n' "$fragments" | grep -qxF "$name" || {
+		echo "unregistered check fragment is present: $name" >&2
+		exit 1
+	}
+done
+
 printf '\nall checks passed\n'

@@ -1,9 +1,9 @@
-# Three exit codes, because the scan has to fail closed on its own failures:
 # Partials sourced by build/check.sh via build/check/lib.sh; IMAGE/TAG/ENGINE,
 # img, root and say/crun come from there (SC2148/SC2153/SC2154 handled here).
 # shellcheck shell=sh disable=SC2154,SC2148
 # shellcheck source=build/check/lib.sh
 
+# Three exit codes, because the scan has to fail closed on its own failures:
 # 0 means no match, 3 means a file matched (a leak, printed as hits), anything
 # else (grep read errors, a vanished subtree mid-scan) is a scan failure and
 # must fail the check rather than print "no matches". The token reaches grep

@@ -1,9 +1,9 @@
-# .dockerignore and .containerignore are two real files (a symlinked ignore file
 # Partials sourced by build/check.sh via build/check/lib.sh; IMAGE/TAG/ENGINE,
 # img, root and say/crun come from there (SC2148/SC2153/SC2154 handled here).
 # shellcheck shell=sh disable=SC2154,SC2148
 # shellcheck source=build/check/lib.sh
 
+# .dockerignore and .containerignore are two real files (a symlinked ignore file
 # trades one failure mode for another: not every consumer follows it), so they
 # need a sync assertion. .dockerignore carries an exact 2-line header, asserted
 # verbatim so it cannot silently become a pattern, then a body that has to equal
