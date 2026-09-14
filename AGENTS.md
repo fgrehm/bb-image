@@ -12,8 +12,8 @@ Container image for running [bb](https://getbb.app). `README.md` describes it fo
   - `container/fonts-cache.inc` — the cache block `fontconfig.sh regen` splices in, kept as its own file so the regen path and the shipped file share the same text.
 - `mise.toml` — the image's toolset, installed as the global mise config at `/opt/mise/config.toml`. It stays at the repo root because it is also the project config mise's shims resolve for work in this repo; moving it under `container/` would change that.
 - `build/check.sh` — everything `make check` runs.
-- `.containerignore` — build-context exclusions. `.dockerignore` is a symlink to it, so docker and podman share one list.
-- `Makefile` — `build`, `check`, `fonts-regen`, `hack`, `run`, `release`.
+- `.containerignore` and `.dockerignore` — build-context exclusions for podman and docker respectively: two real files (docker does not promise to follow a symlinked ignore file), kept in step by an exact-header assertion in `make check`.
+- `Makefile` — `build`, `ci` (build + check in one), `check`, `fonts-regen`, `hack`, `run`, `release`.
 - `examples/smolvm/Smolfile` — a worked machine definition for running the image as a [smolvm](https://smolmachines.com) microVM.
 - `.github/workflows/publish.yml` — builds to a staging tag and runs `make check` before pushing to GHCR on `main` and `v*` tags, so a failing check blocks every publish. On a tag it emits both axes: the bb version from `container/Containerfile` and `img-<tag>` for the image itself. A `main` push that only touches markdown, `examples/`, `LICENSE` or `.gitignore` skips the build; path filters are not evaluated for tag pushes, so a release always builds.
 
@@ -189,3 +189,7 @@ podman stop -t 20 bbtest   # then confirm exit code 0, not 143 or 137
 ## Testing etiquette
 
 Name test containers (`--name bbtest`) and remove them explicitly. A container left running holds its published port, which makes the next run fail to bind while something else answers on that port, and `podman ps --filter name=bb` is a substring match that will happily show you an unrelated `bb-yard-*` container. Use exact names or inspect the container by ID when checking status. Also check the port is free before concluding a run failed for another reason.
+
+## Review discipline
+
+Adversarial or code-review prompts and their findings are artifacts, not chat content: prompts live in `.agents/scratchpad/adversarial-review.md`, and findings written by reviewing agents go into a sibling `adversarial-review-*findings*.md` next to the prompt or round they belong to. Reviewing agents run nothing, please: no builds, containers, or commits; read the diff and the tree and report findings to the file.

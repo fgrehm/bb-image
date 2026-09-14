@@ -2,7 +2,7 @@
 # Behavioural checks against a built image. The Containerfile carries no
 # verification RUNs; every assertion lives here, and the publish workflow runs this
 # script before an image is pushed, so a release cannot ship while anything here
-# fails. Run it by hand as `make check`.
+# fails. Run it by hand as `make check`, or as `make ci` which is build+check.
 #
 # Plain docker and podman both work; the only bind mounts are read-only, which
 # both engines handle the same way.
@@ -20,14 +20,16 @@ say() {
 # Boots the image and pipes the script on stdin (--interactive is not optional:
 # without it the engine gives bash empty stdin and bash -s exits 0 without
 # running anything, a silent pass). TOKEN_ARGS is deliberately word-split into
-# distinct --env flags.
+# distinct --env flags; a GitHub token is [A-Za-z0-9_-]+, so none of its
+# characters break that, and any other class of secret gets an explicit
+# --env=value construction here.
 crun() {
 	# shellcheck disable=SC2086
 	"$ENGINE" run --rm --interactive $TOKEN_ARGS "$@" "$img" /bin/bash -s
 }
 
-# mise resolves unpinned tools against the GitHub API (the first-use install below
-# triggers that), so hand mise a token when one is available, exactly like
+# mise resolves unpinned tools against the GitHub API (the first-use install
+# below triggers that), so hand mise a token when one is available, exactly like
 # `make build` does. The vars are only passed through when GH_TOKEN is set, so a
 # tokenless check still works against a quiet IP.
 TOKEN_ARGS=""
@@ -40,18 +42,28 @@ fi
 
 # .dockerignore and .containerignore are two real files (a symlinked ignore file
 # trades one failure mode for another: not every consumer follows it), so they
-# need a sync assertion; the only permitted difference is .dockerignore's header
-# note, which this comparison skips by ignoring the first three lines.
+# need a sync assertion. .dockerignore carries an exact 2-line header, asserted
+# verbatim below so it cannot silently become a pattern, then a body that has to
+# equal .containerignore.
 say "the two ignore files stay in step"
+[ "$(head -1 .dockerignore)" = "# NOTE: keep in step with .containerignore (make check asserts it); only this" ] ||
+	{
+		echo ".dockerignore's first header line drifted" >&2
+		exit 1
+	}
+[ "$(sed -n '2p' .dockerignore)" = "# 2-line header differs between the two files." ] ||
+	{
+		echo ".dockerignore's second header line drifted" >&2
+		exit 1
+	}
 docker_tail="$(mktemp)"
 trap 'rm -rf "$docker_tail"' EXIT
 tail -n +3 .dockerignore >"$docker_tail"
 if ! diff -u "$docker_tail" .containerignore >/dev/null; then
-	echo ".dockerignore drifted from .containerignore; keep both in step" >&2
+	echo ".dockerignore's body drifted from .containerignore; keep both in step" >&2
 	exit 1
 fi
 rm -f "$docker_tail"
-trap - EXIT
 echo ".dockerignore and .containerignore agree"
 
 # The repo's Containerfile and mise.toml have to agree on the node version; the
@@ -80,13 +92,31 @@ shellcheck build/check.sh container/entrypoint.sh container/fontconfig.sh
 echo "shfmt and shellcheck ok"
 SH
 
+# Baked versions must match the Containerfile's ARGs; the Containerfile only
+# builds and does not assert anything, so this is the check that proves node, bb
+# and playwright are exactly what the recipe says.
+say "baked versions match the Containerfile (bb, node, playwright)"
+bb_arg="$(sed -n 's/^ARG BB_VERSION=\(.*\)$/\1/p' "$root/container/Containerfile")"
+pw_arg="$(sed -n 's/^ARG PLAYWRIGHT_VERSION=\(.*\)$/\1/p' "$root/container/Containerfile")"
+crun --env BB_VERSION="$bb_arg" --env NODE_VERSION="$node_arg" --env PLAYWRIGHT_VERSION="$pw_arg" <<'SH'
+set -eu
+[ "$(bb --version)" = "$BB_VERSION" ] ||
+	{ echo "bb version is $(bb --version), expected $BB_VERSION" >&2; exit 1; }
+[ "$(node --version)" = "v$NODE_VERSION" ] ||
+	{ echo "node version is $(node --version), expected v$NODE_VERSION" >&2; exit 1; }
+[ "$(playwright --version 2>/dev/null | grep -oE 'Version [0-9.]+' | cut -d' ' -f2)" = "$PLAYWRIGHT_VERSION" ] ||
+	{ echo "playwright $(playwright --version), expected $PLAYWRIGHT_VERSION" >&2; exit 1; }
+echo "bb $BB_VERSION, node v$NODE_VERSION, playwright $PLAYWRIGHT_VERSION, all matching"
+SH
+
 # Debian's /etc/profile resets PATH, which drops the mise shims; the profile fix in
-# the container image puts them back, and this verifies that it did.
+# the container image puts them back, and a login shell is exactly the thing that
+# would have dropped them (a non-login shell inherits ENV PATH and would pass even
+# if the profile script were deleted), so the assertion runs inside one.
 say "login shell keeps the shims that /etc/profile would otherwise drop"
 crun <<'SH'
 set -eu
-command -v rg
-echo "rg resolves: $(command -v rg)"
+exec bash -lc 'command -v rg >/dev/null && echo "login shell resolves rg: $(command -v rg)"'
 SH
 
 say "baked tools all run"
@@ -109,19 +139,31 @@ SH
 
 say "fontconfig override: drift guard, single xdg cache directory, match parity"
 "$here/../container/fontconfig.sh" check
-# The runtime view: fc-cache must see exactly the xdg cache, and fc-match has to
-# agree with the distro file family for family, including the mono alias, which
-# lives inline in fonts.conf and nowhere in conf.d. LC_ALL=C on the fc-cache grep
-# keeps the assertion independent of the locale the image or the caller carries.
+# The runtime view: fc-cache must succeed, must report cache directories at all,
+# and every directory it names must be the xdg one; an extra directory beside it is
+# a wrong cachedir list, not a different spelling of success. LC_ALL=C keeps the
+# grep independent of the image's or the caller's locale, and, following the line
+# handling above, the "one allowed directory" is an exact comparison, not a lone
+# grep for it. Chromium's launch smoke below covers whether the runtime honours
+# FONTCONFIG_FILE; asserting the abscnce of the chmod is a syscall-level check
+# that this harness deliberately does not do.
 crun <<'SH'
 set -eu
-XDG_CACHE_HOME=/tmp/fc LC_ALL=C fc-cache -v 2>&1 | grep -i 'cache directory'
+runtime_out="$(XDG_CACHE_HOME=/tmp/fc LC_ALL=C fc-cache -v 2>&1)"
+cache_dirs="$(printf '%s\n' "$runtime_out" | grep -i 'cache directory' | sed 's/:.*//' | sort -u)"
+[ -n "$cache_dirs" ] || { echo "fc-cache reported no cache directories" >&2; exit 1; }
+[ "$cache_dirs" = "/tmp/fc/fontconfig" ] ||
+	{
+		echo "unexpected cache directory list; expected only /tmp/fc/fontconfig, got:" >&2
+		echo "$cache_dirs" >&2
+		exit 1
+	}
 for f in mono monospace serif sans-serif "sans serif" sans emoji; do
 	s=$(FONTCONFIG_FILE=/etc/fonts/fonts.conf fc-match "$f")
 	o=$(fc-match "$f")
 	[ "$s" = "$o" ] || { echo "MISMATCH $f: stock=$s override=$o" >&2; exit 1; }
 done
-echo "fc-match parity ok"
+echo "fc-cache names one xdg cache directory; fc-match parity ok"
 SH
 
 say "Chromium launches twice, cold cache then warm"
@@ -168,22 +210,49 @@ SH
 
 say "build token does not appear anywhere in the image filesystem"
 if [ -n "${GH_TOKEN:-}" ]; then
-	# The token reaches grep through stdin (-f -), so it never lands in an
-	# environment, on a command line, or on disk. The scan cannot see bytes in a
-	# lower layer that a later layer deleted, since that content is whiteouted
-	# rather than removed; the sentinel procedure in AGENTS.md is the only check
-	# that decompresses the layers themselves, and it is the right tool for the
-	# blind spot here: unreadable paths inside the image. Running as uid 0
-	# shrinks that blind spot to what 0700 root-owned dirs hide, rather than
-	# the whole /root tree; 2>/dev/null keeps permission noise off the log
-	# instead of pretending it was scanned.
-	leak="$(printf '%s' "$GH_TOKEN" | "$ENGINE" run --rm --interactive --user 0 "$img" /bin/bash -c \
-		'grep -rlF --binary-files=text -f - / --exclude-dir=proc --exclude-dir=sys --exclude-dir=dev --exclude-dir=run 2>/dev/null | head -5')"
-	if [ -n "$leak" ]; then
+	# Three exit codes, so the scan fails closed on its own failures: 0 means
+	# no match, 3 means a file matched (a leak, printed as hits), anything else
+	# (grep read errors, a vanished subtree mid-scan) is a scan failure and
+	# must fail the check rather than print "no matches". The token reaches
+	# grep through stdin (-f -), so it never lands in an environment, on a
+	# command line, or on disk. The scan cannot see bytes in a lower layer
+	# that a later layer deleted, since that content is whiteouted rather than
+	# removed; the sentinel procedure in AGENTS.md is the only check that
+	# decompresses the layers themselves, and is the right tool for that blind
+	# spot. Running as uid 0 (like the old build-time guard) shrinks the
+	# unreadable-path blind spot to 0700 dirs; stderr's permission noise is
+	# exactly why an unreadable path is an exit 2, not silence.
+	leak_rc=0
+	# The inner payload is deliberately single-quoted so the outer shell does not
+	# expand the container-side script; expanding it would run $-substitutions
+	# meant for the container. SC2016 flags exactly that pattern.
+	# shellcheck disable=SC2016
+	leak="$(printf '%s' "$GH_TOKEN" | "$ENGINE" run --rm --interactive --user 0 "$img" /bin/bash -c '
+		set -eu
+		tmp=$(mktemp -d)
+		trap "rm -rf $tmp" EXIT
+		rc=0
+		grep -rlF --binary-files=text -f - / --exclude-dir=proc --exclude-dir=sys --exclude-dir=dev --exclude-dir=run 2>/dev/null >"$tmp/hits" || rc=$?
+		case $rc in
+			0|1) ;;
+			*) echo "grep exited $rc (unreadable or errored subtree)" >&2; exit 2 ;;
+		esac
+		if [ -s "$tmp/hits" ]; then
+			head -5 "$tmp/hits"
+			exit 3
+		fi
+		echo no-leak
+	')" || leak_rc=$?
+	if [ "$leak_rc" -eq 3 ]; then
 		echo "build token found on disk:" >&2
 		echo "$leak" >&2
 		exit 1
 	fi
+	[ "$leak_rc" -eq 0 ] ||
+		{
+			echo "token scan failed with status $leak_rc; that is a scan error, not a clean image" >&2
+			exit 1
+		}
 	echo "no matches"
 else
 	echo "skipped, no GH_TOKEN supplied"

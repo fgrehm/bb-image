@@ -65,7 +65,8 @@ norm() {
 			gsub(/^[[:space:]]+|[[:space:]]+$/, "", o)
 			if (o != "") print o
 		}
-	' "$1" | sed 's|^<description>.*|<description/>|; s|^<include ignore_missing=.*|<include/>|'
+	' "$1" \
+		| sed 's|^<description>.*|<description/>|; s|^<include ignore_missing="yes">conf.d</include>$|<include ignore_missing="yes">MISSING-INCLUDE</include>|; s|^<include ignore_missing="yes">/etc/fonts/conf.d</include>$|<include ignore_missing="yes">MISSING-INCLUDE</include>|'
 }
 
 tmp="$(mktemp -d)"
@@ -125,7 +126,7 @@ regen)
 	# writes on failure are forwarded so the failure is diagnosable without
 	# hand-inspecting fonts.conf.new.
 	if ! guard_out="$("${0}" check "$dir/fonts.conf.new")"; then
-		echo "$guard_out" | sed '1/^$/d'
+		echo "$guard_out" | sed '/^$/d'
 		echo "regeneration produced a guard-failing file, leaving fonts.conf untouched; inspect $dir/fonts.conf.new" >&2
 		exit 1
 	fi

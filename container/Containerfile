@@ -125,7 +125,7 @@ ARG BUILD_SCRATCH=/tmp/build-scratch
 # node is the runtime the image is built around, so it is installed from an
 # explicit version rather than read out of mise.toml. That means the version is
 # named twice, here and in mise.toml, because a layer cannot both install node
-# and depend on the file that declares it. The check further down fails the build
+# and depend on the file that declares it. check.sh (make check) fails a release
 # if the two drift apart. This is a bootstrap config holding only node; the real
 # toolset is copied in further down, after the expensive layers, so editing it
 # does not invalidate them.
@@ -158,14 +158,14 @@ WORKDIR /home/${USERNAME}
 # failure mode looks exactly like the rate limiting it was meant to fix. Keep 1000 in step
 # with USER_UID.
 #
-# The final RUN greps the whole filesystem for the token and fails the build if it is
-# anywhere on disk.
+# The token does not reach the image: the token leak scan in build/check.sh runs
+# against the built image at verification time, before a release is pushed.
 
 # node is the runtime the image is built around, so it is installed from an
 # explicit version rather than read out of mise.toml. That means the version is
 # named twice, here and in mise.toml, because a layer cannot both install node
-# and depend on the file that declares it. The check further down fails the
-# build if the two drift apart.
+# and depend on the file that declares it. build/check.sh, which make check
+# runs before a release is pushed, fails the check if the two drift apart.
 RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=0400 \
     if [ -s /run/secrets/github_token ]; then \
       export MISE_GITHUB_TOKEN="$(cat /run/secrets/github_token)"; \
@@ -175,7 +175,6 @@ RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=04
            XDG_STATE_HOME="$BUILD_SCRATCH/state"; \
     mise install \
     && mise reshim --force \
-    && node --version \
     && rm -rf "$BUILD_SCRATCH"
 
 # bb is installed globally into mise's node install, so bumping the node version
@@ -194,7 +193,6 @@ RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=04
         --allow-scripts=@parcel/watcher,better-sqlite3,node-pty \
         "bb-app@${BB_VERSION}" \
     && mise reshim --force \
-    && bb --version \
     && rm -rf "$BUILD_SCRATCH"
 
 # Playwright's Chromium, ready to use without a first-run download. Browsers go to
@@ -215,7 +213,6 @@ RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=04
            XDG_STATE_HOME="$BUILD_SCRATCH/state"; \
     npm install -g "playwright@${PLAYWRIGHT_VERSION}" \
     && mise reshim --force \
-    && playwright --version \
     && rm -rf "$BUILD_SCRATCH"
 
 USER root
@@ -266,24 +263,14 @@ RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=04
     export npm_config_cache="$BUILD_SCRATCH/npm" \
            XDG_CACHE_HOME="$BUILD_SCRATCH/cache" \
            XDG_STATE_HOME="$BUILD_SCRATCH/state"; \
-    configured="$(sed -n 's/^node = "\(.*\)"/\1/p' /opt/mise/config.toml)"; \
-    if [ "$configured" != "${NODE_VERSION}" ]; then \
-      echo "node version mismatch: mise.toml wants '${configured}', Containerfile NODE_VERSION is '${NODE_VERSION}'" >&2; \
-      exit 1; \
-    fi; \
     mise install; \
     mise reshim --force; \
-    for shim in fd git-lfs jq nvim rg shfmt shellcheck tmux; do \
-      [ -x "/opt/mise/shims/$shim" ] || { echo "missing shim for baked tool: $shim" >&2; exit 1; }; \
-    done; \
-    node --version; \
-    bb --version; \
     rm -rf "$BUILD_SCRATCH" "/home/${USERNAME}/.cache" "/home/${USERNAME}/.local"
 
 # ---------------------------------------------------------------------------
 # Locale, editor, the fontconfig override, login-shell PATH, and the neovim alias.
-#
 # This block sits last on purpose. An ENV invalidates every layer below it, so
+#
 # putting LANG up with the other ENVs would force node, bb and Playwright's
 # Chromium to rebuild. Nothing above needs these values.
 # ---------------------------------------------------------------------------

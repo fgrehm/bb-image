@@ -109,6 +109,10 @@ jobs:
           # podman does, so this has to be set explicitly.
           file: container/Containerfile
           platforms: ${{ env.PLATFORMS }}
+          # Same labels as the push build: otherwise labels would change the
+          # image config digest between verify and push, and the verified
+          # artifact would not be the published one even on a full cache hit.
+          labels: ${{ steps.meta.outputs.labels }}
           # Loaded into the local docker store so build/check.sh can run it.
           # One staging tag: buildx does not reliably export multiple tags with
           # load, and this one never leaves the runner.
@@ -141,13 +145,16 @@ jobs:
           IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           TAG: staged
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      # The second build re-verifies and pushes. Both builds have identical
-      # instructions and identical context (same SHA, same context files), so the
-      # second build reuses the first build's cached layers instead of
-      # re-resolving unpinned packages; the bytes pushed are the bytes verified,
-      # up to the caveat that a mid-run GHA cache eviction re-executes the RUNs.
-      # The unpinned `latest` tools are lazy, so they install nothing at build
-      # time and cannot diverge between the two builds.
+      # The second build re-verifies and pushes. Both builds share the same
+      # context, file, platforms, build-args, secrets AND labels, so an ordinary
+      # cache hit reuses the exact filesystem layers that were verified; the
+      # verified filesystem is what ships. The push build additionally produces
+      # provenance and sbom attestations (which wrap manifest structure, not
+      # layer bytes), so a literal artifact-identity guarantee would need that
+      # step to become a push of the staged artifact instead of a rebuild.
+      # A mid-run GHA cache eviction would re-execute RUNs and is the residual
+      # risk the cache argument carries; the unpinned `latest` tools are lazy,
+      # so they install nothing at build time and cannot diverge.
 
 
       - name: Build and push
@@ -189,7 +196,11 @@ jobs:
           prev="$(git tag --list 'v*' --sort=-v:refname | grep -vx "$tag" | grep -v -- '-' | head -n1 || true)"
           prev_bb=""
           if [ -n "$prev" ]; then
-            prev_bb="$(git show "${prev}:container/Containerfile" | sed -n 's/^ARG BB_VERSION=\(.*\)/\1/p')"
+            # Tags older than the layout move carry the Containerfile at the
+            # repository root, so look up both paths and take whichever exists.
+            prev_bb="$({ git show "${prev}:container/Containerfile" 2>/dev/null \
+                  || git show "${prev}:Containerfile"; } \
+                  | sed -n 's/^ARG BB_VERSION=\\(.*\\)/\\1/p')"
           fi
 
           if [ -z "$prev_bb" ]; then
