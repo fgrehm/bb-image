@@ -6,6 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- Chromium keeps its fontconfig caches in `~/.cache/fontconfig` and nowhere else. A sandboxed agent running Playwright used to be denied a `chmod("/var/cache/fontconfig")` that fontconfig attempts on every browser launch, because Debian lists that root-owned directory first. The image now sets `FONTCONFIG_FILE` to `/usr/local/share/bb/fonts.conf`, which is Debian's file with the system cache directories removed, so that write is never attempted and the cache lands in the home volume. Rendering is unchanged; the build fails if the shipped file drifts from the distro's.
+
+### Known limitations
+
+- A Chromium launch against a cold fontconfig cache still unlinks the `.uuid` marker in each font directory, because that path is reached when a directory cache has to be rebuilt and does not depend on the cache directory list. A sandbox that denies the unlink prompts once per fresh cache; the next launch is clean, and the cache lives in the home volume, so an agent sees it once rather than on every launch.
+
 ## [0.1.0] - 2026-09-13
 
 First release. Carries bb 0.43.1.

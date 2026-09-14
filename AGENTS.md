@@ -6,6 +6,7 @@ Container image for running [bb](https://getbb.app). `README.md` describes it fo
 
 - `Containerfile` — the image. Debian 13 pinned by digest, apt utilities, mise, then node, bb, Playwright with Chromium, and the baked dev tools at build time, with the locale, editor alias, and login-shell PATH fix at the bottom.
 - `mise.toml` — the image's toolset, installed as the global mise config at `/opt/mise/config.toml`.
+- `fonts.conf` — the fontconfig override the image points `FONTCONFIG_FILE` at. Debian's file with the system cache directories removed, so the `chmod("/var/cache/fontconfig")` fontconfig attempts on every browser launch never happens. The Containerfile fails the build when it drifts from `/etc/fonts/fonts.conf`.
 - `scripts/entrypoint.sh` — PID 1 for the default command. Runs bb behind a log tail and forwards signals.
 - `Makefile` — `build`, `hack`, `run`, `release`.
 - `examples/smolvm/Smolfile` — a worked machine definition for running the image as a [smolvm](https://smolmachines.com) microVM.
@@ -28,6 +29,7 @@ There is no test suite. Verification means building the image and exercising it.
 - **Only cheap tools are left to first use.** The toolchain is in the image rather than on a volume, so a runtime-installed tool is gone once the container is recreated and is re-fetched on next use. Expensive things (node, bb, Playwright's browsers) are baked instead.
 - **The dev tools are baked too, even though they would be cheap to leave lazy.** ripgrep, jq, fd, shfmt, shellcheck, tmux, git-lfs and neovim are installed at build time because they are small and used constantly, and because the toolchain is not volume-backed, so a lazy copy would be re-fetched in every fresh container. The cost is that they live at and below `COPY mise.toml`, so a toolset edit re-downloads them. node, bb and Chromium sit above that `COPY` and stay cached. Baking is why the layer below the `COPY` is no longer free to rebuild.
 - **neovim is aliased to `vi` and `vim` for the whole container**, via wrapper scripts in `/usr/local/bin` rather than a symlink (see the rules below). `EDITOR` and `VISUAL` point at `vi`.
+- **Fontconfig is aimed at a copy of Debian's file that has no system cache directory.** `FcDirCacheWrite` walks the cachedirs in order and, when a directory exists but the write probe fails, calls `chmod(dir, 0755)`. Debian lists `/var/cache/fontconfig` first, which is root-owned image content, so every sandboxed Chromium launch is denied that chmod. fontconfig can add cache directories but never prune one (`<reset-dirs/>` covers `<dir>` only), so the distro file cannot be trimmed by including it: `fonts.conf` is a replacement, and it names the xdg cachedir explicitly because a config with no `<cachedir>` at all makes fontconfig re-add the system one from its compiled-in defaults. `FONTCONFIG_FILE` rather than a patch to `/etc/fonts/fonts.conf`, so a derived image can point somewhere else, and an `ENV` in the last block rather than up with the others, for the layer-cache reason above. Chromium bundles its own fontconfig and honours the variable, and Playwright passes `process.env` to the browser, so the value reaches it; a caller that passes `launch({ env })` replaces that environment and has to carry the variable itself.
 - **Layer order has real consequences.** `COPY mise.toml` sits third from last on purpose. node, bb, and Playwright are installed above it, from `NODE_VERSION`, `BB_VERSION`, and `PLAYWRIGHT_VERSION`, so only the layers at or below the `COPY` depend on the toolset, and those are the only ones a toolset edit rebuilds. Moving the `COPY` earlier makes every toolset edit re-download everything.
 - **`NODE_VERSION` is duplicated on purpose.** It appears both here and in `mise.toml`, because a layer cannot both install node and depend on the file that declares it. A build step asserts the two agree and fails with a readable message; bumping it in only one place fails the build rather than shipping a mismatch.
 - **Agent CLIs and prek stay unpinned** (`version = "latest"`) so a fresh container resolves the current release. node, bb, and Playwright are pinned because they are baked.
@@ -44,6 +46,7 @@ There is no test suite. Verification means building the image and exercising it.
 - Editing `mise.toml` should rebuild only the last three layers. If a toolset edit re-downloads node, reinstalls bb, or re-fetches Chromium, the `COPY mise.toml` has drifted upward.
 - A layer is a stack, and a delete in a later layer is only a whiteout: bytes written in one layer still count toward the image size after a later layer removes them. Verified with a throwaway 200MB layer, where the same delete in a separate `RUN` left the image at 277MB instead of 77MB. So every `RUN` that downloads exports `npm_config_cache`, `XDG_CACHE_HOME`, and `XDG_STATE_HOME` into `$BUILD_SCRATCH` and removes it before the `RUN` ends. `BUILD_SCRATCH` is an `ARG`, not an `ENV`, so none of it reaches the runtime image. Removing these exports, or moving the `rm` into a later `RUN`, silently puts the bytes back.
 - Playwright's browsers need `PLAYWRIGHT_BROWSERS_PATH` to point at `/opt/ms-playwright`, and the directory has to be owned by the user, or the download lands in the home volume and gets copied on every fresh volume.
+- `fonts.conf` is a copy of Debian's, so a font package bump that moves the distro file needs it regenerated in the same commit. The guard `RUN` in the Containerfile compares the two with comments, blank lines and indentation stripped, and fails the build with a diff on drift, so the failure mode is a broken build rather than silently dropped font directories or alias rules. It also asserts exactly one cachedir, the xdg one, and the absolute `conf.d` include, which the diff cannot see because those are the deliberate differences. Comments and formatting are free: only the content between them is compared.
 - `/opt/mise` is owned by and writable by `developer`, and it has to stay that way: derived images add tools to it with `mise install` and `npm install -g`, and those have to keep working. Run those as `developer`, the image default; a `mise install` as root writes root-owned directories that `developer` can no longer extend. There is no repair that survives the image pipeline: a POSIX default ACL on `/opt/mise` works in a live container but is dropped by `podman build`, `commit` and `export`, verified, so it never reaches a published image. The final `RUN` in the `Containerfile` asserts the writability as `developer`, so a root layer that breaks it fails the build. See README, "Using this image as a base".
 - `/opt/mise` also has to stay writable wherever an agent runs sandboxed, and it is the install target for project pins, not only the baked toolset. A mise shim resolves the current repo's `mise.toml` when it is invoked, which is the only mechanism that reaches noninteractive callers such as git hooks. A shell hook cannot replace it: a `cd` hook never runs for noninteractive bash, `sh`, or a direct `execve`, and a wrapper in front of the shim breaks dispatch because mise reads the tool name from `argv[0]` (the same trap as the `vi`/`vim` wrappers above). If a sandbox denies `/opt/mise`, first-use installs of project pins fail there; allow the writes, or bind a project directory over `/opt/mise/installs`. Installs are versioned under `installs/<tool>/<version>`, so sharing `/opt/mise` across projects and threads is safe. This is why project-scoped `MISE_DATA_DIR` is deliberately not implemented: documenting the invariant is the whole fix.
 - `BB_VERSION` in the `Containerfile` pins bb, and the publish workflow reads it from there to keep the tag and the baked version in step. The image's own version comes from the git tag, so bb tags and image tags stay on separate axes.
@@ -129,6 +132,28 @@ Chromium needs its system libraries, so check that it launches rather than trust
 
 ```bash
 podman run --rm bb:dev /bin/bash -c 'cd "$(npm root -g)" && node -e "require(\"playwright\").chromium.launch().then(async b => { console.log(\"ok\"); await b.close(); })"'
+```
+
+The fontconfig override should leave the xdg cache as the only cache directory, and
+rendering should be unchanged. `fc-match` has to agree with the distro file on every
+family, including the `mono` alias, which lives inline in `fonts.conf` and nowhere in
+`conf.d`:
+
+```bash
+podman run --rm bb:dev /bin/bash -c 'XDG_CACHE_HOME=/tmp/fc fc-cache -v 2>&1 | grep -i "cache directory"'
+# expect one line, /tmp/fc/fontconfig, and no mention of /var/cache/fontconfig
+podman run --rm bb:dev /bin/bash -c 'for f in mono monospace serif sans-serif "sans serif" sans emoji; do s=$(FONTCONFIG_FILE=/etc/fonts/fonts.conf fc-match "$f"); o=$(fc-match "$f"); [ "$s" = "$o" ] || echo "MISMATCH $f: stock=$s override=$o"; done; echo parity ok'
+```
+
+Regenerating `fonts.conf` after a font package bump means three changes to
+`/etc/fonts/fonts.conf`: the description, an absolute `conf.d` include, and the cache
+directory list. This leaves a guard-passing body; the header and the cache directory
+comment are carried over from the current file.
+
+```bash
+sed -e 's|<description>.*</description>|<description>bb-image fontconfig (xdg cache only)</description>|' \
+    -e 's|<include ignore_missing="yes">conf.d</include>|<include ignore_missing="yes">/etc/fonts/conf.d</include>|' \
+    -e '/Font cache directory list/d' -e '/<cachedir>/d' /etc/fonts/fonts.conf
 ```
 
 Home should stay near 20K. If it grows, something is writing build residue into `$HOME` that the home volume will copy on first boot. The usual culprits are mise's `~/.cache/sigstore-rust` and `~/.local/state/mise`, which appear whenever anything runs a shim without `$BUILD_SCRATCH` set:

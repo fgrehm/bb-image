@@ -281,12 +281,71 @@ RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=04
     rm -rf "$BUILD_SCRATCH" "/home/${USERNAME}/.cache" "/home/${USERNAME}/.local"
 
 # ---------------------------------------------------------------------------
-# Locale, editor, login-shell PATH, and the neovim alias.
+# Locale, editor, the fontconfig override, login-shell PATH, and the neovim alias.
 #
 # This block sits last on purpose. An ENV invalidates every layer below it, so
 # putting LANG up with the other ENVs would force node, bb and Playwright's
 # Chromium to rebuild. Nothing above needs these values.
 # ---------------------------------------------------------------------------
+
+# Chromium does fontconfig cache bookkeeping before any real work, and a sandboxed
+# agent is denied both writes:
+#
+#   - FcDirCacheWrite probes each cache directory in order and, when the probe
+#     fails but the directory exists, calls chmod(dir, 0755). Debian's first
+#     cachedir is /var/cache/fontconfig, which is root-owned image content, so
+#     every browser launch attempts that chmod. It is also what the agent sees as
+#     "Write blocked: /var/cache/fontconfig".
+#   - a directory cache that has to be rebuilt is preceded by an unlink of the
+#     .uuid marker beside the fonts. Nothing creates those markers in fontconfig
+#     2.15 (FcDirCacheCreateUUID is a stub), so this is an unlink of a path that
+#     does not exist, reached only when the cache is cold.
+#
+# fontconfig can add cache directories but never prune one (<reset-dirs/> covers
+# <dir> only), so Debian's file cannot be trimmed by including it. fonts.conf next
+# to this Containerfile is that file with the system cache directories removed and
+# the xdg one kept explicitly, because a config with no <cachedir> at all makes
+# fontconfig re-add /var/cache/fontconfig from its compiled-in defaults and warn
+# about it.
+#
+# Chromium bundles its own fontconfig, and Playwright hands its environment to the
+# browser, so FONTCONFIG_FILE reaches the Chromium that bb spawns. A caller that
+# passes Playwright's launch({ env }) option replaces that environment wholesale
+# and has to carry FONTCONFIG_FILE across itself.
+#
+# A font package bump that moved the distro file out from under this copy would
+# silently drop font directories and alias rules, so the RUN below fails the build
+# instead. AGENTS.md has the regeneration recipe.
+COPY fonts.conf /usr/local/share/bb/fonts.conf
+ENV FONTCONFIG_FILE=/usr/local/share/bb/fonts.conf
+
+# fonts.conf has to stay Debian's file apart from the lines this image changes on
+# purpose: the description, the conf.d include path, and the cache directory list.
+# Comments, blank lines and indentation are stripped from both sides first, so
+# distro rewording is not drift and the awk below is only there to drop comments
+# without swallowing the content between them.
+RUN set -e; \
+    norm() { \
+      awk 'BEGIN{c=0} {s=$0; o=""; while (s!="") { if (c) { p=index(s,"-->"); if (p==0) s=""; else { s=substr(s,p+3); c=0 } } else { p=index(s,"<!--"); if (p==0) { o=o s; s="" } else { o=o substr(s,1,p-1); s=substr(s,p+4); c=1 } } } gsub(/^[[:space:]]+|[[:space:]]+$/, "", o); if (o!="") print o }' "$1" \
+        | sed 's|^<description>.*|<description/>|; s|^<include ignore_missing=.*|<include/>|'; \
+    }; \
+    body=/usr/local/share/bb/fonts.conf; \
+    tmp="$(mktemp -d)"; \
+    norm /etc/fonts/fonts.conf | grep -v '^<cachedir' > "$tmp/distro"; \
+    norm "$body" | grep -v '^<cachedir' > "$tmp/shipped"; \
+    if ! diff -u "$tmp/distro" "$tmp/shipped"; then \
+      echo "fonts.conf no longer matches /etc/fonts/fonts.conf: regenerate it from the distro file (see AGENTS.md)" >&2; \
+      exit 1; \
+    fi; \
+    rm -rf "$tmp"; \
+    cachedirs="$(norm "$body" | grep '^<cachedir' || true)"; \
+    if [ "$cachedirs" != '<cachedir prefix="xdg">fontconfig</cachedir>' ]; then \
+      echo "fonts.conf must declare exactly one cache directory, the xdg one; found [$cachedirs]" >&2; \
+      exit 1; \
+    fi; \
+    grep -qF '<include ignore_missing="yes">/etc/fonts/conf.d</include>' "$body" \
+      || { echo "fonts.conf must include /etc/fonts/conf.d by absolute path" >&2; exit 1; }; \
+    echo "fonts.conf matches /etc/fonts/fonts.conf, single xdg cachedir"
 
 # LANG is unset in the base image and LC_CTYPE lands on POSIX, which shows up as
 # encoding trouble in anything that prints non-ASCII. C.UTF-8 needs no locales
