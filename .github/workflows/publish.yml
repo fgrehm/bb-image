@@ -64,7 +64,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          read_arg() { sed -n "s/^ARG $1=\(.*\)/\1/p" Containerfile; }
+          read_arg() { sed -n "s/^ARG $1=\(.*\)/\1/p" container/Containerfile; }
 
           bb="$(read_arg BB_VERSION)"
           if [ -z "$bb" ]; then
@@ -97,17 +97,24 @@ jobs:
             type=raw,value=${{ env.BB_MINOR }},enable=${{ github.ref_type == 'tag' && !contains(github.ref_name, '-') }}
             type=raw,value=latest,enable=${{ github.ref_type == 'tag' && !contains(github.ref_name, '-') }}
 
-      - name: Build and push
+      # Build without pushing first, so the verification step below can run
+      # against the image it will gate. The push step re-runs the build against
+      # the same builder instance, where the layer cache from this step is still
+      # warm, so the second pass is cheap.
+      - name: Build image
         uses: docker/build-push-action@v7
         with:
           context: .
           # Not Dockerfile. buildx does not auto-detect Containerfile the way
           # podman does, so this has to be set explicitly.
-          file: Containerfile
+          file: container/Containerfile
           platforms: ${{ env.PLATFORMS }}
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          # Loaded into the local docker store so build/check.sh can run it.
+          # One staging tag: buildx does not reliably export multiple tags with
+          # load, and this one never leaves the runner.
+          push: false
+          load: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:staged
           build-args: |
             BB_VERSION=${{ env.BB_VERSION }}
           # Authenticates mise's GitHub API calls, which otherwise run unauthenticated at
@@ -118,6 +125,46 @@ jobs:
             github_token=${{ secrets.GITHUB_TOKEN }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Everything verification-shaped lives here: the Containerfile has no
+      # assertion RUNs any more. build/check.sh runs the behavioural checks
+      # (launch smoke, fontconfig drift and parity, first-use installs, token
+      # leak, home size) against the image that just built, and runs before the
+      # push step below, so nothing ships while these fail. Runs on main too:
+      # :edge is a publish just the same, and the checks are the only place
+      # fontconfig drift can still be caught.
+      - name: Verify image
+        # Runs against the staged image from the build step, in docker (the
+        # runner's engine; podman is not preinstalled there).
+        run: make check ENGINE=docker
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          TAG: staged
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # The second build re-verifies and pushes. Both builds have identical
+      # instructions and identical context (same SHA, same context files), so the
+      # second build reuses the first build's cached layers instead of
+      # re-resolving unpinned packages; the bytes pushed are the bytes verified,
+      # up to the caveat that a mid-run GHA cache eviction re-executes the RUNs.
+      # The unpinned `latest` tools are lazy, so they install nothing at build
+      # time and cannot diverge between the two builds.
+
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: container/Containerfile
+          platforms: ${{ env.PLATFORMS }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            BB_VERSION=${{ env.BB_VERSION }}
+          secrets: |
+            github_token=${{ secrets.GITHUB_TOKEN }}
+          cache-from: type=gha
+          # Not type=gha,mode=max here; that was done in the build step above.
           provenance: true
           sbom: true
 
@@ -142,7 +189,7 @@ jobs:
           prev="$(git tag --list 'v*' --sort=-v:refname | grep -vx "$tag" | grep -v -- '-' | head -n1 || true)"
           prev_bb=""
           if [ -n "$prev" ]; then
-            prev_bb="$(git show "${prev}:Containerfile" | sed -n 's/^ARG BB_VERSION=\(.*\)/\1/p')"
+            prev_bb="$(git show "${prev}:container/Containerfile" | sed -n 's/^ARG BB_VERSION=\(.*\)/\1/p')"
           fi
 
           if [ -z "$prev_bb" ]; then

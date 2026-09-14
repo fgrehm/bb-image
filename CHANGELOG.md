@@ -8,7 +8,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
-- Chromium keeps its fontconfig caches in `~/.cache/fontconfig` and nowhere else. A sandboxed agent running Playwright used to be denied a `chmod("/var/cache/fontconfig")` that fontconfig attempts on every browser launch, because Debian lists that root-owned directory first. The image now sets `FONTCONFIG_FILE` to `/usr/local/share/bb/fonts.conf`, which is Debian's file with the system cache directories removed, so that write is never attempted and the cache lands in the home volume. Rendering is unchanged; the build fails if the shipped file drifts from the distro's.
+- Verification moved out of the Containerfile entirely. The image recipe now only builds; everything it used to assert at build time (fonts.conf drift against the distro file, the token leak scan, the writable mise dir) plus the behavioural checks (launch smoke, fontconfig parity, first-use installs, home size) run through `make check`, and the publish workflow refuses to push an image until every check passes. `make check` also lint-scripts the repo with the baked shfmt and shellcheck, so the repo's scripts are linted by the tools inside the image.
+- Source layout: the image recipe and its content live in `container/` (Containerfile, entrypoint.sh, fonts.conf, fontconfig.sh), host-side build tooling in `build/`, `mise.toml` at the root, and the build context is pruned by real `.containerignore` and `.dockerignore` copies kept in step. The image content itself barely changed: the entrypoint moved with a reformat-only diff, and removing the tail RUNs also removed the `/tmp` sigstore/mise residue their smoke write left behind, which shrinks the image slightly.
+
+### Fixed
+
+- Chromium keeps its fontconfig caches in `~/.cache/fontconfig` and nowhere else. A sandboxed agent running Playwright used to be denied a `chmod("/var/cache/fontconfig")` that fontconfig attempts on every browser launch, because Debian lists that root-owned directory first. The image now sets `FONTCONFIG_FILE` to `/usr/local/share/bb/fonts.conf`, which is Debian's file with the system cache directories removed, so that write is never attempted and the cache lands in the home volume. Rendering is unchanged; `make check` refuses a release if the shipped file drifts from the distro's.
 
 ### Known limitations
 

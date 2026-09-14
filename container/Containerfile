@@ -236,7 +236,7 @@ RUN mkdir -p /home/${USERNAME}/.bb
 RUN printf '%s\n' 'eval "$(mise activate bash)"' >> /home/${USERNAME}/.bashrc \
     && printf '%s\n' 'eval "$(mise activate zsh)"' >> /home/${USERNAME}/.zshrc
 
-COPY --chown=$USERNAME:$USERNAME scripts/entrypoint.sh /home/${USERNAME}/entrypoint.sh
+COPY --chown=$USERNAME:$USERNAME container/entrypoint.sh /home/${USERNAME}/entrypoint.sh
 
 # ---------------------------------------------------------------------------
 # The toolset. Only this and below rebuild when mise.toml changes.
@@ -312,40 +312,16 @@ RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=04
 # browser, so FONTCONFIG_FILE reaches the Chromium that bb spawns. A caller that
 # passes Playwright's launch({ env }) option replaces that environment wholesale
 # and has to carry FONTCONFIG_FILE across itself.
-#
-# A font package bump that moved the distro file out from under this copy would
-# silently drop font directories and alias rules, so the RUN below fails the build
-# instead. AGENTS.md has the regeneration recipe.
-COPY fonts.conf /usr/local/share/bb/fonts.conf
+
+COPY container/fonts.conf /usr/local/share/bb/fonts.conf
 ENV FONTCONFIG_FILE=/usr/local/share/bb/fonts.conf
 
-# fonts.conf has to stay Debian's file apart from the lines this image changes on
-# purpose: the description, the conf.d include path, and the cache directory list.
-# Comments, blank lines and indentation are stripped from both sides first, so
-# distro rewording is not drift and the awk below is only there to drop comments
-# without swallowing the content between them.
-RUN set -e; \
-    norm() { \
-      awk 'BEGIN{c=0} {s=$0; o=""; while (s!="") { if (c) { p=index(s,"-->"); if (p==0) s=""; else { s=substr(s,p+3); c=0 } } else { p=index(s,"<!--"); if (p==0) { o=o s; s="" } else { o=o substr(s,1,p-1); s=substr(s,p+4); c=1 } } } gsub(/^[[:space:]]+|[[:space:]]+$/, "", o); if (o!="") print o }' "$1" \
-        | sed 's|^<description>.*|<description/>|; s|^<include ignore_missing=.*|<include/>|'; \
-    }; \
-    body=/usr/local/share/bb/fonts.conf; \
-    tmp="$(mktemp -d)"; \
-    norm /etc/fonts/fonts.conf | grep -v '^<cachedir' > "$tmp/distro"; \
-    norm "$body" | grep -v '^<cachedir' > "$tmp/shipped"; \
-    if ! diff -u "$tmp/distro" "$tmp/shipped"; then \
-      echo "fonts.conf no longer matches /etc/fonts/fonts.conf: regenerate it from the distro file (see AGENTS.md)" >&2; \
-      exit 1; \
-    fi; \
-    rm -rf "$tmp"; \
-    cachedirs="$(norm "$body" | grep '^<cachedir' || true)"; \
-    if [ "$cachedirs" != '<cachedir prefix="xdg">fontconfig</cachedir>' ]; then \
-      echo "fonts.conf must declare exactly one cache directory, the xdg one; found [$cachedirs]" >&2; \
-      exit 1; \
-    fi; \
-    grep -qF '<include ignore_missing="yes">/etc/fonts/conf.d</include>' "$body" \
-      || { echo "fonts.conf must include /etc/fonts/conf.d by absolute path" >&2; exit 1; }; \
-    echo "fonts.conf matches /etc/fonts/fonts.conf, single xdg cachedir"
+# A font package bump that moved the distro file out from under this copy would
+# silently drop font directories and alias rules, so the comparison against the
+# distro file is a release gate. It lives in container/fontconfig.sh, next to the
+# file it guards, and runs under make check: the publish workflow runs make check
+# before an image is pushed, and make fonts-regen regenerates this file. Nothing
+# verification-shaped lives in this Containerfile; every RUN builds, none assert.
 
 # LANG is unset in the base image and LC_CTYPE lands on POSIX, which shows up as
 # encoding trouble in anything that prints non-ASCII. C.UTF-8 needs no locales
@@ -361,7 +337,16 @@ USER root
 # shell (`bash -l`, ssh, or anything bb spawns through one) loses every lazy tool and
 # they all become "command not found". Image-owned, so unlike ~/.bashrc this is not
 # frozen into the home volume and can still be fixed after a volume exists.
-RUN printf '%s\n' \
+#
+# neovim as vi and vim, for the whole container. These must be wrapper scripts and
+# not symlinks. mise's shims are symlinks to the mise binary and it dispatches on
+# the tool name in argv[0], so a shim reached as "vim" is rejected with "vim is not
+# a valid shim". `exec nvim` re-enters through the shim under its real name instead.
+# mise's neovim declares bins = ["nvim"], so no vim/vi shim exists to shadow these;
+# if one ever appeared it would break the alias, and the shim scan running under
+# make check catches that before a release ships.
+RUN set -e; \
+    printf '%s\n' \
       '# Debian /etc/profile resets PATH, which drops the mise shims. Put them back.' \
       'case ":$PATH:" in' \
       '  *:/opt/mise/shims:*) ;;' \
@@ -369,81 +354,24 @@ RUN printf '%s\n' \
       'esac' \
       'export PATH' \
       > /etc/profile.d/mise-shims.sh \
-    && chmod 0644 /etc/profile.d/mise-shims.sh
-
-# neovim as vi and vim, for the whole container.
-#
-# These must be wrapper scripts and not symlinks. mise's shims are symlinks to the
-# mise binary and it dispatches on the tool name in argv[0], so a shim reached as
-# "vim" is rejected with "vim is not a valid shim". `exec nvim` re-enters through the
-# shim under its real name instead. mise's neovim declares bins = ["nvim"], so no
-# vim/vi shim exists to shadow these, and the loop refuses to continue if that ever
-# changes. See AGENTS.md before replacing this with a symlink.
-# This RUN also has to mount the token. `vi --version` goes through a shim, which runs
-# mise, which resolves every unpinned `latest` tool in the config against the GitHub API.
-# Without the mount this one smoke test produced 34 rate-limit warnings and 11
-# `github auth: no` lines while the four RUNs that do mount it stayed quiet.
-RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=0400 \
-    set -e; \
-    if [ -s /run/secrets/github_token ]; then \
-      export MISE_GITHUB_TOKEN="$(cat /run/secrets/github_token)"; \
-    fi; \
+    && chmod 0644 /etc/profile.d/mise-shims.sh; \
     for name in vi vim; do \
-      if [ -e "/opt/mise/shims/$name" ]; then \
-        echo "refusing to shadow the $name shim with the neovim wrapper" >&2; \
-        exit 1; \
-      fi; \
       printf '%s\n' '#!/bin/sh' \
         '# neovim, aliased for the whole container. Not a symlink, see AGENTS.md.' \
         'exec nvim "$@"' \
         > "/usr/local/bin/$name"; \
       chmod 0755 "/usr/local/bin/$name"; \
-    done; \
-    HOME=/tmp vi --version | head -1
+    done
 
-# Last RUN as root, and the guard on the forwarded token. It runs after every layer
-# that handles the token, and as root so that it can read /root too. grep reads the
-# token with -f, so the value never appears in an argument list, and only file paths are
-# ever printed. A match means the token reached disk, which would put it in the image and
-# in every volume seeded from it, so the build stops instead of shipping.
-#
-# This cannot see bytes in a lower layer that a later layer deleted, since that content
-# is whiteouted rather than removed. The sentinel procedure in AGENTS.md covers that case
-# and is the only check that decompresses the layers themselves.
-RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=0400 \
-    if [ -s /run/secrets/github_token ]; then \
-      hits="$(grep -rlF --binary-files=text -f /run/secrets/github_token / \
-                --exclude-dir=proc --exclude-dir=sys --exclude-dir=dev \
-                --exclude-dir=run 2>/dev/null | head -5)"; \
-      if [ -n "$hits" ]; then \
-        echo "build token found on disk, refusing to ship:" >&2; \
-        echo "$hits" >&2; \
-        exit 1; \
-      fi; \
-      echo "token leak check: no matches on disk"; \
-    else \
-      echo "token leak check: skipped, no token supplied"; \
-    fi
-
-USER $USERNAME
-
-# The invariant derived images depend on: the mise data dir is developer-owned and
-# writable, so a derived image can add tools with `mise install` or `npm install -g` and
-# they stay usable, exactly like the baked ones. This runs as developer, after every
-# layer, so a future root layer that breaks the ownership fails the build rather than
-# shipping. It cannot be enforced against `USER root` in a derived image: a root-run
-# install still writes root-owned directories, and no permission mechanism survives the
-# image build to repair that. See README, "Using this image as a base".
-RUN set -e; \
-    test -w /opt/mise/installs; \
-    test -w /opt/mise/shims; \
-    test -w "/opt/mise/installs/node/${NODE_VERSION}/lib/node_modules"; \
-    probe="/opt/mise/installs/.writable-probe"; \
-    touch "$probe"; \
-    rm "$probe"; \
-    echo "mise data dir writable by $(id -un)"
+# No verification RUNs anywhere in this file on purpose: every assertion that used
+# to live at the tail (writable mise dir, token leak scan, fontconfig drift) now
+# runs under make check, in build/check.sh and container/fontconfig.sh, and the
+# publish workflow runs make check before an image is pushed. This file only
+# builds the image, it never asserts about it.
 
 # Default to serving bb, with the entrypoint forwarding signals so `podman stop`
 # is a clean shutdown. Override with a command to get a shell instead:
 #   podman run --rm -it bb:dev /bin/bash
+USER $USERNAME
+
 CMD ["bash", "/home/developer/entrypoint.sh"]

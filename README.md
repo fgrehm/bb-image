@@ -41,6 +41,7 @@ Configs that use only plain version strings need no trust step; ones using `[set
 make build
 make run     # serves bb on http://localhost:38886
 make hack    # shell in the same environment
+make check   # verify the built image (release CI runs this before pushing)
 ```
 
 bb's default port is 38886. If something else on your machine already owns it, pass another: `make run BB_PORT=39886`. It is published on `127.0.0.1` only, so it is not reachable from other machines; `make run BB_BIND=0.0.0.0` changes that, and then you should reach it by IPv4 address rather than `localhost` for the reason in the gotchas.
@@ -155,7 +156,7 @@ The VM's disk replaces the container's named volume: `~/.bb`, caches, and shell 
 
 ## Publishing
 
-`.github/workflows/publish.yml` builds and pushes on every push to `main` and on `v*` tags. A `main` push that only touches documentation, meaning markdown, `examples/`, `LICENSE` or `.gitignore`, skips the build entirely, since none of it reaches the image. Tag pushes are never filtered, so a release always builds even when the tagged commit is documentation-only. There are two version axes: the bb release baked into the image, read from `BB_VERSION` in the Containerfile so a tag can never disagree with what is inside, and the image's own version, taken from the git tag. The second exists so that an image-only change, such as a node bump or a refreshed base digest, has somewhere to go without a bb release.
+`.github/workflows/publish.yml` builds on every push to `main` and on `v*` tags, runs `make check` against the built image, and only then pushes to GHCR, so a failing check blocks every publish. A `main` push that only touches documentation, meaning markdown, `examples/`, `LICENSE` or `.gitignore`, skips the build entirely, since none of it reaches the image. Tag pushes are never filtered, so a release always builds even when the tagged commit is documentation-only. There are two version axes: the bb release baked into the image, read from `BB_VERSION` in the Containerfile so a tag can never disagree with what is inside, and the image's own version, taken from the git tag. The second exists so that an image-only change, such as a node bump or a refreshed base digest, has somewhere to go without a bb release.
 
 `make release VERSION=0.1.0` tags and pushes, which is what runs the workflow. The tag message records the bb version, so `git tag -n1` answers which bb is in which image without opening the Containerfile.
 

@@ -4,23 +4,30 @@ Container image for running [bb](https://getbb.app). `README.md` describes it fo
 
 ## Layout
 
-- `Containerfile` — the image. Debian 13 pinned by digest, apt utilities, mise, then node, bb, Playwright with Chromium, and the baked dev tools at build time, with the locale, editor alias, and login-shell PATH fix at the bottom.
-- `mise.toml` — the image's toolset, installed as the global mise config at `/opt/mise/config.toml`.
-- `fonts.conf` — the fontconfig override the image points `FONTCONFIG_FILE` at. Debian's file with the system cache directories removed, so the `chmod("/var/cache/fontconfig")` fontconfig attempts on every browser launch never happens. The Containerfile fails the build when it drifts from `/etc/fonts/fonts.conf`.
-- `scripts/entrypoint.sh` — PID 1 for the default command. Runs bb behind a log tail and forwards signals.
-- `Makefile` — `build`, `hack`, `run`, `release`.
+- `container/` — the image and what it contains:
+  - `container/Containerfile` — the recipe. Debian 13 pinned by digest, apt utilities, mise, then node, bb, Playwright with Chromium, and the baked dev tools at build time, with the locale, editor alias, and login-shell PATH fix at the bottom. No verification RUNs anywhere: the Containerfile only builds.
+  - `container/entrypoint.sh` — PID 1 for the default command. Runs bb behind a log tail and forwards signals.
+  - `container/fonts.conf` — the fontconfig override the image points `FONTCONFIG_FILE` at. Debian's file with the system cache directories removed, so the `chmod("/var/cache/fontconfig")` fontconfig attempts on every browser launch never happens. `container/fontconfig.sh` compares it against the distro file under `make check`.
+  - `container/fontconfig.sh` — the drift guard and the regeneration for `fonts.conf`, kept next to the file they guard. `check` mode diffs the shipped file against the distro's (comments stripped) and asserts the single xdg cachedir and the absolute conf.d include; `regen` mode rewrites it.
+  - `container/fonts-cache.inc` — the cache block `fontconfig.sh regen` splices in, kept as its own file so the regen path and the shipped file share the same text.
+- `mise.toml` — the image's toolset, installed as the global mise config at `/opt/mise/config.toml`. It stays at the repo root because it is also the project config mise's shims resolve for work in this repo; moving it under `container/` would change that.
+- `build/check.sh` — everything `make check` runs.
+- `.containerignore` — build-context exclusions. `.dockerignore` is a symlink to it, so docker and podman share one list.
+- `Makefile` — `build`, `check`, `fonts-regen`, `hack`, `run`, `release`.
 - `examples/smolvm/Smolfile` — a worked machine definition for running the image as a [smolvm](https://smolmachines.com) microVM.
-- `.github/workflows/publish.yml` — builds and pushes to GHCR on `main` and `v*` tags. On a tag it emits both axes: the bb version from the Containerfile and `img-<tag>` for the image itself. A `main` push that only touches markdown, `examples/`, `LICENSE` or `.gitignore` skips the build; path filters are not evaluated for tag pushes, so a release always builds.
+- `.github/workflows/publish.yml` — builds to a staging tag and runs `make check` before pushing to GHCR on `main` and `v*` tags, so a failing check blocks every publish. On a tag it emits both axes: the bb version from `container/Containerfile` and `img-<tag>` for the image itself. A `main` push that only touches markdown, `examples/`, `LICENSE` or `.gitignore` skips the build; path filters are not evaluated for tag pushes, so a release always builds.
 
 Nothing heavy lives in `$HOME` at first boot. The toolchain is at `/opt/mise` and Playwright's browsers at `/opt/ms-playwright`. Caches are meant to be in `$HOME`: nothing pins a cache location, so at runtime npm writes `~/.npm` and mise writes `~/.cache/mise`, inside the home volume, where they survive a recreate.
 
 ## Commands
 
 - `make build` builds `bb:dev`. Layers are cached, so a `mise.toml`-only change is quick. It forwards a GitHub token when one is available, from `GH_TOKEN`, `GITHUB_TOKEN`, or `gh auth token`, which authenticates mise's API calls and stops the build tripping GitHub's unauthenticated rate limit.
+- `make check` is the verification harness and the only place assertions live: the Containerfile carries none. It runs build/check.sh against the built image, which includes container/fontconfig.sh for the fonts.conf drift guard. CI runs it before the push step, so a release cannot ship while any check fails. Forwarded token works the same way it does for build.
+- `make fonts-regen` rewrites container/fonts.conf from the distro fontconfig inside the image, and validates the result with the drift guard before replacing the file.
 - `make hack` opens a shell in the image, with the same volume as `run`.
 - `make run` serves bb with persistent state.
 
-There is no test suite. Verification means building the image and exercising it.
+Verification is `make check`; for anything not covered by it, build the image and exercise it.
 
 ## Design decisions worth not undoing
 
@@ -28,10 +35,11 @@ There is no test suite. Verification means building the image and exercising it.
 - **The toolset is the *global* mise config, aimed there by `MISE_GLOBAL_CONFIG_FILE`, not the system config at `/etc/mise`.** The same file under `/etc/mise` reads perfectly well and looks tidier, but mise only creates bootstrap shims for tools it picks up from the user and project scope. Under `/etc/mise`, node and bb get shims, every lazy tool silently gets none, and first-use installation stops working with no error anywhere. This cost an afternoon once.
 - **Only cheap tools are left to first use.** The toolchain is in the image rather than on a volume, so a runtime-installed tool is gone once the container is recreated and is re-fetched on next use. Expensive things (node, bb, Playwright's browsers) are baked instead.
 - **The dev tools are baked too, even though they would be cheap to leave lazy.** ripgrep, jq, fd, shfmt, shellcheck, tmux, git-lfs and neovim are installed at build time because they are small and used constantly, and because the toolchain is not volume-backed, so a lazy copy would be re-fetched in every fresh container. The cost is that they live at and below `COPY mise.toml`, so a toolset edit re-downloads them. node, bb and Chromium sit above that `COPY` and stay cached. Baking is why the layer below the `COPY` is no longer free to rebuild.
+- **The verification harness needs the baked lint tools, and that is by design:** `make check` runs shfmt and shellcheck over the repo's scripts inside the image itself, so the scripts are linted by the same versions that ship with the image. A lazy shfmt would make the check depend on first-use install state.
 - **neovim is aliased to `vi` and `vim` for the whole container**, via wrapper scripts in `/usr/local/bin` rather than a symlink (see the rules below). `EDITOR` and `VISUAL` point at `vi`.
 - **Fontconfig is aimed at a copy of Debian's file that has no system cache directory.** `FcDirCacheWrite` walks the cachedirs in order and, when a directory exists but the write probe fails, calls `chmod(dir, 0755)`. Debian lists `/var/cache/fontconfig` first, which is root-owned image content, so every sandboxed Chromium launch is denied that chmod. fontconfig can add cache directories but never prune one (`<reset-dirs/>` covers `<dir>` only), so the distro file cannot be trimmed by including it: `fonts.conf` is a replacement, and it names the xdg cachedir explicitly because a config with no `<cachedir>` at all makes fontconfig re-add the system one from its compiled-in defaults. `FONTCONFIG_FILE` rather than a patch to `/etc/fonts/fonts.conf`, so a derived image can point somewhere else, and an `ENV` in the last block rather than up with the others, for the layer-cache reason above. Chromium bundles its own fontconfig and honours the variable, and Playwright passes `process.env` to the browser, so the value reaches it; a caller that passes `launch({ env })` replaces that environment and has to carry the variable itself.
 - **Layer order has real consequences.** `COPY mise.toml` sits third from last on purpose. node, bb, and Playwright are installed above it, from `NODE_VERSION`, `BB_VERSION`, and `PLAYWRIGHT_VERSION`, so only the layers at or below the `COPY` depend on the toolset, and those are the only ones a toolset edit rebuilds. Moving the `COPY` earlier makes every toolset edit re-download everything.
-- **`NODE_VERSION` is duplicated on purpose.** It appears both here and in `mise.toml`, because a layer cannot both install node and depend on the file that declares it. A build step asserts the two agree and fails with a readable message; bumping it in only one place fails the build rather than shipping a mismatch.
+- **`NODE_VERSION` is duplicated on purpose.** It appears both here and in `mise.toml`, because a layer cannot both install node and depend on the file that declares it. `make check` asserts the two agree; bumping it in only one place fails the check rather than shipping a mismatch.
 - **Agent CLIs and prek stay unpinned** (`version = "latest"`) so a fresh container resolves the current release. node, bb, and Playwright are pinned because they are baked.
 - **`make run` and `make hack` pass `--security-opt no-new-privileges`.** The base packages bring the standard Debian setuid binaries, including `su` and `mount`, and none of it serves this image's purpose, so agents should not be able to parlay any of it into container root. Bubblewrap is unaffected, since creating a user namespace is not a privilege gain. Override with `SECURITY_OPTS=` when `su` is genuinely needed. Changing the run flags this way is a major bump under the table below.
 - **`WORKDIR` is `$HOME`, not a single mount point**, because bb hosts many projects and resolves them by path.
@@ -46,15 +54,15 @@ There is no test suite. Verification means building the image and exercising it.
 - Editing `mise.toml` should rebuild only the last three layers. If a toolset edit re-downloads node, reinstalls bb, or re-fetches Chromium, the `COPY mise.toml` has drifted upward.
 - A layer is a stack, and a delete in a later layer is only a whiteout: bytes written in one layer still count toward the image size after a later layer removes them. Verified with a throwaway 200MB layer, where the same delete in a separate `RUN` left the image at 277MB instead of 77MB. So every `RUN` that downloads exports `npm_config_cache`, `XDG_CACHE_HOME`, and `XDG_STATE_HOME` into `$BUILD_SCRATCH` and removes it before the `RUN` ends. `BUILD_SCRATCH` is an `ARG`, not an `ENV`, so none of it reaches the runtime image. Removing these exports, or moving the `rm` into a later `RUN`, silently puts the bytes back.
 - Playwright's browsers need `PLAYWRIGHT_BROWSERS_PATH` to point at `/opt/ms-playwright`, and the directory has to be owned by the user, or the download lands in the home volume and gets copied on every fresh volume.
-- `fonts.conf` is a copy of Debian's, so a font package bump that moves the distro file needs it regenerated in the same commit. The guard `RUN` in the Containerfile compares the two with comments, blank lines and indentation stripped, and fails the build with a diff on drift, so the failure mode is a broken build rather than silently dropped font directories or alias rules. It also asserts exactly one cachedir, the xdg one, and the absolute `conf.d` include, which the diff cannot see because those are the deliberate differences. Comments and formatting are free: only the content between them is compared.
-- `/opt/mise` is owned by and writable by `developer`, and it has to stay that way: derived images add tools to it with `mise install` and `npm install -g`, and those have to keep working. Run those as `developer`, the image default; a `mise install` as root writes root-owned directories that `developer` can no longer extend. There is no repair that survives the image pipeline: a POSIX default ACL on `/opt/mise` works in a live container but is dropped by `podman build`, `commit` and `export`, verified, so it never reaches a published image. The final `RUN` in the `Containerfile` asserts the writability as `developer`, so a root layer that breaks it fails the build. See README, "Using this image as a base".
+- `fonts.conf` is a copy of Debian's, so a font package bump that moves the distro file needs it regenerated in the same commit. `container/fontconfig.sh check` compares the two with comments, blank lines and indentation stripped, and `make check` fails on drift, so the failure mode is a refused release rather than silently dropped font directories or alias rules. It also asserts exactly one cachedir, the xdg one, and the absolute `conf.d` include, which the diff cannot see because those are the deliberate differences. Comments and formatting are free: only the content between them is compared. Regenerate with `make fonts-regen`.
+- `/opt/mise` is owned by and writable by `developer`, and it has to stay that way: derived images add tools to it with `mise install` and `npm install -g`, and those have to keep working. Run those as `developer`, the image default; a `mise install` as root writes root-owned directories that `developer` can no longer extend. There is no repair that survives the image pipeline: a POSIX default ACL on `/opt/mise` works in a live container but is dropped by `podman build`, `commit` and `export`, verified, so it never reaches a published image. `make check` asserts the writability as `developer`, so a broken layer fails the check before a release ships. See README, "Using this image as a base".
 - `/opt/mise` also has to stay writable wherever an agent runs sandboxed, and it is the install target for project pins, not only the baked toolset. A mise shim resolves the current repo's `mise.toml` when it is invoked, which is the only mechanism that reaches noninteractive callers such as git hooks. A shell hook cannot replace it: a `cd` hook never runs for noninteractive bash, `sh`, or a direct `execve`, and a wrapper in front of the shim breaks dispatch because mise reads the tool name from `argv[0]` (the same trap as the `vi`/`vim` wrappers above). If a sandbox denies `/opt/mise`, first-use installs of project pins fail there; allow the writes, or bind a project directory over `/opt/mise/installs`. Installs are versioned under `installs/<tool>/<version>`, so sharing `/opt/mise` across projects and threads is safe. This is why project-scoped `MISE_DATA_DIR` is deliberately not implemented: documenting the invariant is the whole fix.
 - `BB_VERSION` in the `Containerfile` pins bb, and the publish workflow reads it from there to keep the tag and the baked version in step. The image's own version comes from the git tag, so bb tags and image tags stay on separate axes.
 - bb routes service output to `~/.bb/logs/*`. Anything that replaces the entrypoint must keep that visible.
-- mise's shims are symlinks to the `mise` binary and it dispatches on the tool name in `argv[0]`. So `vi` and `vim` are wrapper scripts in `/usr/local/bin` that `exec nvim "$@"`, not symlinks to `/opt/mise/shims/nvim`. A symlink reached as `vim` fails with "vim is not a valid shim". Nothing shadows the wrappers because mise's neovim declares `bins = ["nvim"]`, and the build refuses to continue if a `vi` or `vim` shim ever appears.
+- mise's shims are symlinks to the `mise` binary and it dispatches on the tool name in `argv[0]`. So `vi` and `vim` are wrapper scripts in `/usr/local/bin` that `exec nvim "$@"`, not symlinks to `/opt/mise/shims/nvim`. A symlink reached as `vim` fails with "vim is not a valid shim". Nothing shadows the wrappers because mise's neovim declares `bins = ["nvim"]`; if a `vi` or `vim` shim ever appears, make check's shim scan refuses before a release ships.
 - mise writes into `$HOME` if nothing redirects it: `~/.cache/sigstore-rust` from verifying the aqua-backed tools, and `~/.local/state/mise`. Neither `MISE_CACHE_DIR` nor a pinned state directory covers the sigstore one, which follows `XDG_CACHE_HOME`. `$BUILD_SCRATCH` handles both during the build, and the toolset `RUN` still ends with an `rm -rf` of `~/.cache` and `~/.local` as a guard. That `rm` stays last in the `RUN`, because `node --version` and `bb --version` go through shims and run mise again.
 - The build token is forwarded as a BuildKit secret, and the mount needs `uid=1000,gid=1000,mode=0400`. The toolset RUNs run as the unprivileged `developer`, and a secret mounted with default permissions is unreadable to it. `cat` then fails inside a command substitution, which does not trip `set -e`, so the build carries on with an empty token and mise stays unauthenticated while looking exactly like the rate limiting the token was meant to fix. Keep that uid in step with `USER_UID`.
-- The token must never be a build arg or an `ENV`, both of which persist in image metadata, and must never be echoed: podman does not redact secrets from build output the way BuildKit does. A final `RUN` as root greps the whole filesystem for it and fails the build if it is anywhere on disk.
+- The token must never be a build arg or an `ENV`, both of which persist in image metadata, and must never be echoed: podman does not redact secrets from build output the way BuildKit does. make check greps essentially the whole of the built image filesystem for it (the scan runs as root inside the image, so /root is inside the scan; the token reaches grep through stdin, never disk or an argument; unreadable paths and whiteouted bytes are the documented blind spots) and refuses the release if it is anywhere on disk.
 - That filesystem guard cannot see bytes in a lower layer that a later layer deleted, since the content is whiteouted rather than removed. Verified: a leak written in one RUN and deleted in the next is invisible to the guard and still present in the saved image. The sentinel scan below is the only check that catches it.
 - bubblewrap is installed for agent sandboxing and is deliberately not setuid. It works under podman's default seccomp, because unprivileged user namespaces are permitted there, but a fresh `--proc` mount combined with PID-namespace unsharing fails inside the container with `Can't mount proc on /proc: Operation not permitted`. Only `--privileged` lifts that. `--security-opt seccomp=unconfined`, `apparmor=unconfined`, `label=disable` and `--cap-add SYS_ADMIN` all fail to, and bwrap will not start with extra capabilities anyway (`Unexpected capabilities but not setuid`). Do not add `--privileged` to `make run` without deciding to give up the container's isolation. This is specific to containers: the same command works in a smolvm microVM, where there is no nesting, so do not carry the workaround over there.
 - Publishing bb's port on every interface breaks `localhost` on this podman and pasta (6.1.1 with 2026_07_28.f8df3f1). A wildcard publish makes pasta listen dual-stack, IPv6 connections are reset while IPv4 works, and `localhost` resolves to `::1` first, so clients fail against a port that is genuinely open. That is why `make run` publishes `127.0.0.1`, via `BB_BIND`; it also keeps bb off the LAN, which suits a local single-user tool. Set `BB_BIND=0.0.0.0` on purpose and reach it by IPv4 address. `--network=host` is the fallback for other rootless networking problems.
@@ -99,27 +107,16 @@ Practical rules:
 
 ```bash
 make build
+make check
+```
+
+`make check` is the whole assertion set: node/bb/playwright versions in the built image, the shim layout and the vi/vim alias, shfmt and shellcheck over every script in the repo, the `fonts.conf` drift guard with cachedir and `fc-match` parity, a login-shell smoke, the two-launch Chromium test, one lazy first-use install (`go version`), the writable mise dir, the token leak scan, and the home-size bound. CI runs the same thing before the push step, so a release cannot ship while any check fails.
+
+When a check fails, these run the pieces by hand:
+
+```bash
 podman run --rm bb:dev /bin/bash -c 'node --version; bb --version; playwright --version; pwd'
 podman run --rm bb:dev /bin/bash -c 'ls /opt/mise/shims | grep -E "^(go|prek|claude)$"'
-```
-
-The baked dev tools and the editor alias:
-
-```bash
-podman run --rm bb:dev /bin/bash -c 'vi --version; rg --version; jq --version; fd --version; shfmt --version; shellcheck --version; tmux -V; git-lfs --version'
-podman run --rm bb:dev /bin/bash -c 'ls /opt/mise/shims | grep -E "^(vim|vi)$" || echo "no vim/vi shim, correct"'
-```
-
-The mise data dir has to stay writable by `developer`, so a derived image can add tools to it:
-
-```bash
-podman run --rm bb:dev /bin/bash -c 'test -w /opt/mise/installs && test -w /opt/mise/shims && touch /opt/mise/installs/.probe && rm /opt/mise/installs/.probe && echo writable as $(id -un)'
-```
-
-A login shell used to lose every lazy tool to `/etc/profile`. It should not:
-
-```bash
-podman run --rm bb:dev /bin/bash -lc 'command -v ruby; command -v rg'
 ```
 
 First-use installs are the most likely thing to regress. Exercise one directly:
@@ -134,29 +131,13 @@ Chromium needs its system libraries, so check that it launches rather than trust
 podman run --rm bb:dev /bin/bash -c 'cd "$(npm root -g)" && node -e "require(\"playwright\").chromium.launch().then(async b => { console.log(\"ok\"); await b.close(); })"'
 ```
 
-The fontconfig override should leave the xdg cache as the only cache directory, and
-rendering should be unchanged. `fc-match` has to agree with the distro file on every
-family, including the `mono` alias, which lives inline in `fonts.conf` and nowhere in
-`conf.d`:
+Regenerating `fonts.conf` is `make fonts-regen`, not hand editing: it runs
+container/fontconfig.sh's sed recipe (description, an absolute `conf.d` include, the cache directory list)
+against the distro file inside the image, keeps the shipped header comment and the
+shipped cache block, and refuses to replace the file if the result would not pass
+the drift guard.
 
-```bash
-podman run --rm bb:dev /bin/bash -c 'XDG_CACHE_HOME=/tmp/fc fc-cache -v 2>&1 | grep -i "cache directory"'
-# expect one line, /tmp/fc/fontconfig, and no mention of /var/cache/fontconfig
-podman run --rm bb:dev /bin/bash -c 'for f in mono monospace serif sans-serif "sans serif" sans emoji; do s=$(FONTCONFIG_FILE=/etc/fonts/fonts.conf fc-match "$f"); o=$(fc-match "$f"); [ "$s" = "$o" ] || echo "MISMATCH $f: stock=$s override=$o"; done; echo parity ok'
-```
-
-Regenerating `fonts.conf` after a font package bump means three changes to
-`/etc/fonts/fonts.conf`: the description, an absolute `conf.d` include, and the cache
-directory list. This leaves a guard-passing body; the header and the cache directory
-comment are carried over from the current file.
-
-```bash
-sed -e 's|<description>.*</description>|<description>bb-image fontconfig (xdg cache only)</description>|' \
-    -e 's|<include ignore_missing="yes">conf.d</include>|<include ignore_missing="yes">/etc/fonts/conf.d</include>|' \
-    -e '/Font cache directory list/d' -e '/<cachedir>/d' /etc/fonts/fonts.conf
-```
-
-Home should stay near 20K. If it grows, something is writing build residue into `$HOME` that the home volume will copy on first boot. The usual culprits are mise's `~/.cache/sigstore-rust` and `~/.local/state/mise`, which appear whenever anything runs a shim without `$BUILD_SCRATCH` set:
+Home should stay near 20K; `make check` trips at 40K. If home grows, something is writing build residue into `$HOME` that the home volume will copy on first boot. The usual culprits are mise's `~/.cache/sigstore-rust` and `~/.local/state/mise`, which appear whenever anything runs a shim without `$BUILD_SCRATCH` set:
 
 ```bash
 podman run --rm bb:dev du -sh /home/developer
@@ -169,7 +150,7 @@ podman run --rm bb:dev /bin/bash -c 'ls -d /opt/npm-cache /opt/mise/cache 2>/dev
 podman run --rm bb:dev /bin/bash -c 'gh --version >/dev/null 2>&1; find /home/developer/.cache -mindepth 1 -maxdepth 1'
 ```
 
-The token check. There are two halves, and the guard in the image only covers one of them, so
+The token check. There are two halves, and the checks only cover one of them, so
 build with a sentinel and scan the saved archive, which sees whiteouted bytes as well:
 ```bash
 SENT='ghp_sentinel_donotleak_0123456789abcdef'
@@ -179,8 +160,8 @@ grep -rlF "$SENT" /tmp/img.x | head    # expect no output
 rm -rf /tmp/img.tar /tmp/img.x
 ```
 
-The build's own guard should print `token leak check: no matches on disk`, or
-`skipped, no token supplied` when there is no token. Both are a pass.
+make check's token half should print `no matches`, or `skipped, no GH_TOKEN supplied`
+when there is no token. Both are a pass.
 
 bubblewrap is present for agent sandboxing. Check the binary and a working sandbox, since a
 missing or setuid `bwrap` both matter:

@@ -1,5 +1,3 @@
-# NOTE: keep in step with .containerignore (make check asserts it); only this
-# 3-line header differs between the two files.
 # Image build context. Everything the Containerfile does not COPY out of the
 # host tree is noise at best (-f points at the file, not the context) and a
 # cache-invalidating context change at worst, so the whole of the host tooling

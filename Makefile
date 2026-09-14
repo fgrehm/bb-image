@@ -4,7 +4,7 @@ ENGINE ?= podman
 
 # Read from the Containerfile so a release tag states the bb version without it
 # having to be repeated on the command line.
-BB_VERSION := $(shell sed -n 's/^ARG BB_VERSION=\(.*\)/\1/p' Containerfile)
+BB_VERSION := $(shell sed -n 's/^ARG BB_VERSION=\(.*\)/\1/p' container/Containerfile)
 
 # Host port for the bb server. Override when something else already owns 38886,
 # e.g. `make run BB_PORT=39886`.
@@ -71,10 +71,26 @@ BUILD_SECRET = $(if $(GH_TOKEN),$(GH_TOKEN_SECRET))
 # Extra flags, e.g. RUN_ARGS='-v ~/src:/home/developer/src:Z'
 RUN_ARGS ?=
 
-.PHONY: build hack run release
+.PHONY: build check fonts-regen hack run release
 
 build:
-	$(ENGINE) build -t $(IMAGE):$(TAG) $(BUILD_SECRET) .
+	$(ENGINE) build -f container/Containerfile -t $(IMAGE):$(TAG) $(BUILD_SECRET) .
+
+# All verification now lives here, run against the built image: behavioural
+# checks (launch smoke, fontconfig override, first-use install, home size) in
+# build/check.sh, and the guards that used to be RUNs at the tail of the
+# Containerfile (fonts.conf drift, token leak, mise data-dir ownership). The
+# publish workflow runs this before the push step, so a release cannot ship
+# while anything here fails. Forwarded token works the same way it does for
+# build: GH_TOKEN, then GITHUB_TOKEN, then `gh auth token`.
+check:
+	IMAGE=$(IMAGE) TAG=$(TAG) ENGINE=$(ENGINE) build/check.sh
+
+# Regenerates container/fonts.conf from the distro fontconfig inside the image;
+# the thing to do after a font package bump moves /etc/fonts/fonts.conf. The
+# result is validated with the drift guard before it replaces the file.
+fonts-regen:
+	IMAGE=$(IMAGE) TAG=$(TAG) ENGINE=$(ENGINE) container/fontconfig.sh regen
 
 hack:
 	$(ENGINE) run --rm -it $(USERNS) $(SECURITY_OPTS) $(VOLUMES) $(MOUNTS) $(RUN_ARGS) $(IMAGE):$(TAG) /bin/bash

@@ -23,9 +23,9 @@ tail_pid=$!
 
 # Default to serving bb. Callers can pass their own command instead.
 if [ "$#" -eq 0 ]; then
-  set -- bb-app \
-    --server-bind-host "${BB_SERVER_BIND_HOST:-0.0.0.0}" \
-    --server-port "${BB_SERVER_PORT:-38886}"
+	set -- bb-app \
+		--server-bind-host "${BB_SERVER_BIND_HOST:-0.0.0.0}" \
+		--server-port "${BB_SERVER_PORT:-38886}"
 fi
 
 "$@" &
@@ -38,8 +38,8 @@ trap 'kill -TERM "$bb_pid" 2>/dev/null' TERM INT
 # exit code is what the container reports.
 status=0
 while kill -0 "$bb_pid" 2>/dev/null; do
-  wait "$bb_pid"
-  status=$?
+	wait "$bb_pid"
+	status=$?
 done
 
 kill "$tail_pid" 2>/dev/null
