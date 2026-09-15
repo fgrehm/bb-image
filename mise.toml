@@ -2,6 +2,12 @@
 # Non-interactive by design: the image build and first-use installs must never prompt.
 yes = true
 jobs = 4
+# Shims ("fast" commands) are hard-capped by mise at a single ~3s attempt with
+# no retries, regardless of what is configured here; longer values only benefit
+# explicit commands such as `mise install`. These widen both for slow GitHub
+# minutes, and the cache keeps a good fetch useful for a day.
+fetch_remote_versions_cache = "24h"
+fetch_remote_versions_timeout = "15s"
 
 [tools]
 

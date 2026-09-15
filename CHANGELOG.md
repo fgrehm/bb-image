@@ -29,6 +29,7 @@ Carries bb 0.43.1.
 
 ### Fixed
 
+- First-use installs of lazy tools survive slow GitHub minutes. mise's default remote-version fetch timed out after 3s and cached the version list for only an hour, so `mise install <tool>` could fail outright against a slow api.github.com and retry more often than needed. The toolset now caches remote version lists for 24 hours and allows 15s per fetch. Shim invocations keep mise's hard-coded single ~3s attempt by design, so the residual warning noise on an uncached shim call is unchanged.
 - Chromium keeps its fontconfig caches in `~/.cache/fontconfig` and nowhere else. A sandboxed agent running Playwright used to be denied a `chmod("/var/cache/fontconfig")` that fontconfig attempts on every browser launch, because Debian lists that root-owned directory first. The image now sets `FONTCONFIG_FILE` to `/usr/local/share/bb/fonts.conf`, which is Debian's file with the system cache directories removed, so that write is never attempted and the cache lands in the home volume. Rendering is unchanged; the claim is release-gated by an interposing shim (`build/fcshim.c`) that runs in `make check` and refuses a release on any fontconfig write outside the xdg cache.
 
 ### Known limitations
