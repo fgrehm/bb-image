@@ -16,6 +16,12 @@ data_dir="${BB_DATA_DIR:-$HOME/.bb}"
 log_dir="$data_dir/logs"
 mkdir -p "$log_dir"
 
+# Reconcile the home volume with what this image ships: a named volume is
+# seeded exactly once, so without this an existing volume never picks up later
+# image updates to AGENTS.md or the shell rc blocks. Copies a user edited are
+# left untouched; a hydration problem is reported here but never fatal.
+/usr/local/share/bb/hydrate-home.sh install
+
 # -F follows by name and retries, so this is safe to start before bb has
 # created either log.
 tail -F -n 25 "$log_dir/server-stdio.log" "$log_dir/host-daemon-stdio.log" 2>/dev/null &

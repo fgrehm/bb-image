@@ -6,6 +6,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- Home hydration. The container-level `~/.bb/AGENTS.md` (new in this release, see below) and the `mise activate` blocks in `~/.bashrc` and `~/.zshrc` live in the home volume, which is seeded from the image exactly once, so until now an existing volume never picked up later image updates. The entrypoint now reconciles them on every container start (`hydrate-home.sh`): a copy whose hash matches a version the image has shipped is replaced when the image moves on, a copy the user edited is left untouched, and the image's home is hydrated at build time too so a fresh volume is correct even for callers that bypass the entrypoint. The registry of shipped hashes lives at `/usr/local/share/bb`, outside the volume. A user edit is a permanent opt-out for that file; deleting it lets the image reinstall it.
+- A container-level `~/.bb/AGENTS.md` shipped in the image: bb appends it to the system prompt of every provider-backed thread, so agents get in-container guidance on the mise toolchain (lazy installs, project pins, the `/opt/mise` ownership rule, and that Playwright and its Chromium are baked and must not be reinstalled). Users can fine-tune their copy in the volume, and edits are kept by the hydration mechanism.
+
+### Changed
+
+- The entrypoint now performs one state-mutating step before bb starts, the hydration above. Everything else is unchanged: it still only tails bb's logs and forwards SIGTERM, and a hydration problem is logged and skipped, never fatal.
+
 ## [0.1.1] - 2026-09-14
 
 Carries bb 0.43.1.

@@ -23,6 +23,7 @@ fragments='10_ignorefiles.sh
 70_chromium.sh
 71_chromium_writes.sh
 80_first_use.sh
+85_agents_md.sh
 90_mise_writable.sh
 95_token_scan.sh
 99_home_size.sh'

@@ -11,6 +11,8 @@ Batteries included container image for running [bb](https://getbb.app), built to
 - A UTF-8 locale (`LANG=C.UTF-8`) and `EDITOR`/`VISUAL` pointing at `vi`, so `git commit` without `-m` and `git rebase -i` work
 - mise-managed toolchains, agent CLIs, and prek, installed on first use
 - `$HOME` as the working directory, since bb hosts many projects and resolves them by path
+- A container-level `~/.bb/AGENTS.md` that bb appends to the system prompt of every provider-backed thread, telling agents how the mise toolchain works (lazy installs, project pins, the `/opt/mise` ownership rule) and that Playwright and its Chromium are baked and must not be reinstalled. Edits you make to your copy are kept; unmodified copies are kept current
+- Home hydration: `~/.bb/AGENTS.md` and the `mise activate` blocks in `~/.bashrc` and `~/.zshrc` are image-managed, and a named volume is seeded from the image only once, so the entrypoint hydrates them on every container start. A copy the image shipped (recognised by hash) is replaced when the image moves on; a copy you edited is left untouched
 - Almost nothing heavy in `$HOME` at first boot. The toolchain is at `/opt/mise` and the Playwright browsers at `/opt/ms-playwright`, so the home volume is seeded with kilobytes rather than gigabytes. Caches are the exception, and they are meant to be there: at runtime npm writes `~/.npm` and mise writes `~/.cache/mise`, both inside the home volume, so they survive a container recreate
 
 ## Lazy tool loading
@@ -34,6 +36,14 @@ Project pins resolve with no shell setup, interactive or not: a shim reads the r
 Agent CLIs and prek are deliberately unpinned, so a fresh container resolves the current release rather than whatever was current when the image was built.
 
 Configs that use only plain version strings need no trust step; ones using `[settings]`, `[env]`, inline tables, or templated tasks do.
+
+## Home hydration
+
+The `~/.bb/AGENTS.md` guidance and the `mise activate` blocks in `~/.bashrc` and `~/.zshrc` live in the home volume, and a named volume is seeded from the image exactly once. Left alone, a volume would carry its first-boot copies forever, so the entrypoint hydrates them on every container start.
+
+The mechanism is hash-based. The image ships the pristine sources and a registry at `/usr/local/share/bb` (outside the volume), and the entrypoint runs `hydrate-home.sh install` before bb starts. A home copy whose hash matches a hash the image has shipped is ours and gets replaced when the content moves on, one version or several; a copy whose hash matches nothing the image has shipped is assumed to be user-edited and is left untouched. A hash you do not recognise is therefore a permanent opt-out, and the hydrator logs which of the three happened on each start.
+
+Editing your copy in the volume is supported and is the intended way to fine-tune it. Two consequences worth knowing: the user edit wins, meaning you silently stop receiving updates for that file, and the only escape is deleting the file, or the whole managed block with both markers, so the image reinstalls it.
 
 ## Running it
 

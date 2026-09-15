@@ -226,13 +226,6 @@ USER $USERNAME
 # and bb could not write to it.
 RUN mkdir -p /home/${USERNAME}/.bb
 
-# Interactive shells get full activation for env vars and hooks. Shims stay on
-# PATH for non-interactive processes. Home is volume-backed at runtime, so these
-# files freeze at first boot and changing them later will not reach an existing
-# volume.
-RUN printf '%s\n' 'eval "$(mise activate bash)"' >> /home/${USERNAME}/.bashrc \
-    && printf '%s\n' 'eval "$(mise activate zsh)"' >> /home/${USERNAME}/.zshrc
-
 COPY --chown=$USERNAME:$USERNAME container/entrypoint.sh /home/${USERNAME}/entrypoint.sh
 
 # ---------------------------------------------------------------------------
@@ -356,9 +349,40 @@ RUN set -e; \
 # publish workflow runs make check before an image is pushed. This file only
 # builds the image, it never asserts about it.
 
+# The hydration registry is stamped by developer with an atomic rename, so its
+# directory, not just the files copied into it, must be developer-owned.
+RUN install -d -o "$USERNAME" -g "$USERNAME" /usr/local/share/bb
+
+# Back to the image user for the tail of the build, so the hydration below
+# writes both the stamped registry and its home copies as developer.
+USER $USERNAME
+
+# Home hydration. bb appends <dataDir>/AGENTS.md to the system prompt of every
+# provider-backed thread, so agents.md there is the container-level guidance
+# agents get about the mise toolchain; the rc snippets are the mise activation
+# blocks for interactive shells. All of these are home-volume content, and a
+# named volume is seeded from the image exactly once, so the entrypoint hydrates
+# them on every start with hydrate-home.sh against the registry shipped here.
+# The copies under /usr/local/share/bb are the pristine sources and the registry
+# that vouches for which shipped versions the volume may still carry; home
+# copies a user edited are left alone.
+#
+# This block sits last so that editing a managed source rebuilds only these
+# layers. Above the toolset COPY, an AGENTS.md edit would invalidate the mise
+# toolset layers and re-download the baked dev tools.
+COPY --chown=$USERNAME:$USERNAME container/agents.md container/rc-bash.sh \
+    container/rc-zsh.sh container/managed.tsv container/managed-prev.tsv \
+    container/hydrate-home.sh /usr/local/share/bb/
+
+# Stamp the registry so its hashes cannot drift from the sources it points at,
+# then hydrate the image's home once: a freshly seeded volume is already
+# correct, so make hack works on a new volume without waiting for the
+# entrypoint.
+RUN bash /usr/local/share/bb/hydrate-home.sh stamp \
+    && HOME=/home/${USERNAME} bash /usr/local/share/bb/hydrate-home.sh install
+
 # Default to serving bb, with the entrypoint forwarding signals so `podman stop`
 # is a clean shutdown. Override with a command to get a shell instead:
 #   podman run --rm -it bb:dev /bin/bash
-USER $USERNAME
 
 CMD ["bash", "/home/developer/entrypoint.sh"]
