@@ -6,10 +6,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
-### Fixed
-
-- First-use installs of lazy tools survive slow GitHub minutes. mise's default remote-version fetch timed out after 3s and cached the version list for only an hour, so `mise install <tool>` could fail outright against a slow api.github.com and retry more often than needed. The toolset now caches remote version lists for 24 hours and allows 15s per fetch. Shim invocations keep mise's hard-coded single ~3s attempt by design, so the residual warning noise on an uncached shim call is unchanged.
-
 ## [0.2.0] - 2026-09-15
 
 Carries bb 0.43.1.
@@ -23,6 +19,10 @@ Carries bb 0.43.1.
 ### Changed
 
 - The entrypoint now performs one state-mutating step before bb starts, the hydration above. Everything else is unchanged: it still only tails bb's logs and forwards SIGTERM, and a hydration problem is logged and skipped, never fatal.
+
+### Fixed
+
+- First-use installs of lazy tools survive slow GitHub minutes. mise's default remote-version fetch timed out after 3s and cached the version list for only an hour, so `mise install <tool>` could fail outright against a slow api.github.com and retry more often than needed. The toolset now caches remote version lists for 24 hours and allows 15s per fetch. Shim invocations keep mise's hard-coded single ~3s attempt by design, so the residual warning noise on an uncached shim call is unchanged.
 
 ## [0.1.1] - 2026-09-14
 
