@@ -6,8 +6,9 @@
 # reference is pulled from inside the guest, which is one reason networking has to
 # be on.
 #
-# Until the first release is tagged, the pullable tag is `edge`. Afterwards use a
-# bb version tag such as `0.43.1`, or `img-0.1.0` to pin one exact build.
+# Until 0.2.0, the pullable tag was `edge`. Pin an exact build with `img-0.2.0`, or use a
+# bb version tag such as `0.43.1` to follow the bb release even when the image has not
+# been rebuilt.
 #
 #   smolvm machine create --name bb --smolfile examples/smolvm/Smolfile
 #   smolvm machine start --name bb
@@ -20,7 +21,8 @@
 # Verified with smolvm 1.16.0 on Linux x86_64 with KVM. The image is linux/amd64
 # only, so on Apple Silicon it needs `rosetta = true`.
 
-image = "ghcr.io/fgrehm/bb:edge"
+# Pin to the 0.2.0 image for reproducible machines, or leave `edge` to ride main.
+image = "ghcr.io/fgrehm/bb:img-0.2.0"
 
 # bb needs outbound access for provider APIs, git, and package installs. Note that with
 # networking on and no token, mise resolves the unpinned agent CLIs against the GitHub
