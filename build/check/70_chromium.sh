@@ -19,12 +19,23 @@ const { chromium } = require("playwright");
 (async () => {
 	for (let i = 1; i <= 2; i++) {
 		const b = await chromium.launch();
+		const page = await b.newPage();
+		await page.goto("data:text/html,<h1>ok</h1>");
+		await page.screenshot({ path: "/tmp/two-" + i + ".png" });
 		await b.close();
 		console.log("launch " + i + " ok");
 	}
 })();
 EOF
+# The screenshot file is the proof navigation rendered, not just that the
+# browser process started: it is checked for size after the run.
 crun --volume "$tmp/two.cjs:/tmp/two.cjs:ro" <<'SH'
 set -eu
 NODE_PATH="$(npm root -g)" XDG_CACHE_HOME=/tmp/fcfc node /tmp/two.cjs
+for i in 1 2; do
+	[ -s "/tmp/two-$i.png" ] || {
+		echo "screenshot $i missing or empty; Chromium launched but did not render" >&2
+		exit 1
+	}
+done
 SH
