@@ -1,0 +1,331 @@
+#!/bin/sh
+# Backup and trace archival for the container: backup writes the persistent
+# state to a zstd-compressed tar archive with an integrity check on the
+# result, and traces mirrors agent session traces and logs with rsync. Both
+# are for a caller (a host systemd timer, a compose sidecar cron, or a human)
+# to schedule, without anything backup-shaped living in the home volume.
+# Scheduling lives outside this image by design (rootless, no boot-time
+# service shipped by the project); this script is only the archiving itself.
+#
+# Usage:
+#   bb-backup backup --output DIR [--sqlite PATH]... [--keep N] SRC [SRC...]
+#   bb-backup traces --output DIR [--include PATH]... [--flatten]
+#   bb-backup verify FILE
+#
+# The first argument is the subcommand, and there is no default: a bare
+# invocation prints usage rather than assuming a strategy. backup is the full
+# recovery archive; traces is the additive rsync mirror; verify re-runs the
+# integrity check an archive got at write time.
+#
+# Examples, with the volume and mount names the README's make run uses. The
+# output directories are host-side and never inside the home volume: a backup
+# that lives on the volume it protects dies with it.
+#
+#   # Recovery archive of the whole home, live db snapshotted, 7 kept.
+#   # bb-home is the named volume; /var/backups/bb is a host directory.
+#   bb-backup backup --output /backups/bb \
+#       --sqlite /home/developer/.bb/bb.db --keep 7 /home/developer
+#
+#   # Daily traces mirror, path-preserving, one directory per machine.
+#   bb-backup traces --output /backups/bb/traces
+#
+#   # Merged shape, for a synced remote that wants one directory per tool
+#   # rather than one per machine:
+#   bb-backup traces --output /traces/pi --flatten
+#
+# backup:
+# --output DIR   destination for backup-<timestamp>.tar.zst (created if missing)
+# --sqlite PATH  a live SQLite database: snapshotted with `sqlite3 .backup` into
+#                a staging tree at the same path it will have inside the
+#                archive, so the archive carries a consistent copy instead of a
+#                mid-write page mix. Use for ~/.bb/bb.db and any other live db.
+#                Opted into per database; without it, the sources are copied
+#                as-is.
+# --keep N       keep only the N newest archives in the output directory
+#                (default 0: prune nothing)
+#
+# traces:
+# --output DIR   the mirror's root (created if missing)
+# --include PATH an extra path to include, alongside the defaults. Not
+#                mandatory: the defaults below the image cover the agent CLIs
+#                it ships, and BB_BACKUP_TRACES_INCLUDES (colon-separated,
+#                like PATH) bakes a deployment's extra locations into the
+#                environment, so a compose file can carry the convention
+#                without flags. Explicit --include paths must exist; missing
+#                defaults and env entries are skipped silently.
+# --flatten      copy entries by name, merging every source into the target,
+#                instead of the default full-path layout. Matches a manual
+#                `rsync -av src/* dest/` flow; two sources holding the same
+#                path relative to their include then overwrite each other,
+#                still additively (last write wins, nothing removed).
+#
+# verify:
+# re-runs the integrity check an archive got at write time; zero means intact.
+# Useful for restore flows and for timers that health-check old archives.
+#
+# traces archives agent session traces and logs (pi sessions, bb logs, the pi
+# bridge, claude and codex state by default; --include adds more) with rsync,
+# into the output directory itself, and is strictly additive: it never prunes,
+# never deletes, and each run copies only the files modified since the previous
+# run, tracked by a marker file in the output directory. A file deleted from
+# the source stays in the mirror and in every earlier copy, since no run ever
+# removes anything, so the output directory accumulates every trace the CLIs
+# ever wrote. Unlike the backup mode it is about state, not recovery: restore
+# is not its job, and it runs independently of bb.
+set -eu
+umask 077
+
+usage() {
+	echo "usage: bb-backup backup --output DIR [--sqlite PATH]... [--keep N] SRC [SRC...]" >&2
+	echo "       bb-backup traces --output DIR [--include PATH]... [--flatten]" >&2
+	echo "       bb-backup verify FILE" >&2
+	exit 2
+}
+
+mode=
+arg=
+keep=0
+sqlite_files=
+sources=
+trace_includes=
+flatten=0
+
+# The subcommand is the first argument and is required: there is deliberately
+# no default backup strategy for a bare invocation.
+[ $# -ge 1 ] || usage
+case "$1" in
+backup | traces | verify)
+	mode="$1"
+	shift
+	;;
+*)
+	usage
+	;;
+esac
+
+while [ $# -gt 0 ]; do
+	case "$1" in
+	--output)
+		[ $# -ge 2 ] || usage
+		[ "$mode" = verify ] || arg="$2"
+		shift 2
+		;;
+	--sqlite)
+		[ $# -ge 2 ] || usage
+		[ -f "$2" ] || {
+			echo "bb-backup: no such database: $2" >&2
+			exit 1
+		}
+		sqlite_files="$sqlite_files $2"
+		shift 2
+		;;
+	--include)
+		[ $# -ge 2 ] || usage
+		trace_includes="$trace_includes $2"
+		shift 2
+		;;
+	--flatten)
+		[ "$mode" = traces ] || usage
+		flatten=1
+		shift
+		;;
+	--keep)
+		[ $# -ge 2 ] || usage
+		case "$2" in
+		'' | *[!0-9]*) usage ;;
+		esac
+		keep="$2"
+		shift 2
+		;;
+	--)
+		shift
+		while [ $# -gt 0 ]; do
+			sources="$sources $1"
+			shift
+		done
+		break
+		;;
+	-*)
+		usage
+		;;
+	*)
+		if [ "$mode" = verify ]; then
+			arg="$1"
+		else
+			sources="$sources $1"
+		fi
+		shift
+		;;
+	esac
+done
+
+verify_one() {
+	# Two passes over the archive: zstd checks its own framing and checksums,
+	# then tar reads every member through the whole decompressed payload. A
+	# truncated file fails in both, a corrupted middle fails in the second.
+	zstd -q -t -- "$1"
+	tar -tf "$1" >/dev/null
+}
+
+if [ "$mode" = verify ]; then
+	[ "$arg" != '' ] || usage
+	[ -f "$arg" ] || {
+		echo "bb-backup: no such archive: $arg" >&2
+		exit 1
+	}
+	verify_one "$arg"
+	echo "bb-backup: archive intact: $arg"
+	exit 0
+fi
+
+if [ "$mode" = traces ]; then
+	[ "$arg" != '' ] || usage
+	output="$arg"
+	[ ! -e "$output" ] || [ -d "$output" ] || {
+		echo "bb-backup: output exists and is not a directory: $output" >&2
+		exit 1
+	}
+
+	# The default set is the trace and log state of the agent CLIs this image
+	# ships, relative to $HOME. BB_BACKUP_TRACES_INCLUDES (colon-separated,
+	# like PATH) adds deployment-specific locations from the environment, so a
+	# compose file or timer can carry the convention without flags. --include
+	# adds paths on top of both, and is the only layer that must exist: missing
+	# defaults and env entries are skipped without complaint, since not every
+	# CLI or mount is in use everywhere.
+	trace_paths=
+	for p in .pi/agent/sessions .bb/logs .bb/pi-bridge-sessions .claude .codex; do
+		[ -d "$HOME/$p" ] && trace_paths="$trace_paths $HOME/$p"
+	done
+	oldIFS=$IFS
+	IFS=:
+	for p in ${BB_BACKUP_TRACES_INCLUDES:-}; do
+		[ -e "$p" ] && trace_paths="$trace_paths $p"
+	done
+	IFS=$oldIFS
+	for p in $trace_includes; do
+		[ -e "$p" ] || {
+			echo "bb-backup: no such trace path: $p" >&2
+			exit 1
+		}
+		trace_paths="$trace_paths $p"
+	done
+	[ "$trace_paths" != '' ] || {
+		echo 'bb-backup: traces: nothing to archive (no default or included paths exist)' >&2
+		exit 1
+	}
+
+	marker="$output/.traces-last"
+	since='1970-01-01 00:00:00'
+	[ ! -f "$marker" ] || since="$(cat -- "$marker")"
+	mkdir -p -- "$output"
+
+	# Only files newer than the marker are candidates; the find is what makes
+	# the run incremental rather than a full re-copy, and an empty run leaves
+	# the marker alone, so nothing is lost or duplicated.
+	# shellcheck disable=SC2086
+	find $trace_paths -type f -newermt "$since" >"$output/.files-from.$$"
+	[ -s "$output/.files-from.$$" ] || {
+		rm -f -- "$output/.files-from.$$"
+		echo 'bb-backup: traces: nothing new since the last run'
+		exit 0
+	}
+
+	# rsync into the output directory itself, no tarball. No --delete anywhere:
+	# an older copy of a file a source has since removed stays, so the mirror
+	# only ever grows. rsync's exit status is the check; a failure leaves the
+	# marker unmoved and the next run sees the same files as new.
+	status=0
+	if [ "$flatten" = 0 ]; then
+		# Default: -R with --files-from replays each absolute path minus its
+		# leading slash, so the mirror has the same layout as the sources.
+		rsync -aR --files-from="$output/.files-from.$$" / "$output" || status=$?
+	else
+		# Flatten: per source, entries made relative to that source, so every
+		# source merges into the target like a manual `rsync -av src/* dest/`.
+		# Two sources holding the same relative path overwrite each other, but
+		# nothing is ever removed.
+		for src in $trace_paths; do
+			if [ -f "$src" ] && [ ! -d "$src" ]; then
+				rsync -a -- "$src" "$output/" || status=$?
+				continue
+			fi
+			one="$output/.files-from.$$.$(printf '%s' "$src" | md5sum | cut -d' ' -f1)"
+			# Entries relative to the source, and -R recreates exactly that
+			# structure in the target: every source merges into the target root,
+			# like a manual `rsync -av src/* dest/`.
+			find "$src" -type f -newermt "$since" | sed "s|^$src/||" >"$one"
+			[ -s "$one" ] || {
+				rm -f -- "$one"
+				continue
+			}
+			rsync -aR --files-from="$one" "$src/" "$output/" || status=$?
+			rm -f -- "$one"
+		done
+	fi
+	rm -f -- "$output/.files-from.$$"
+	[ "$status" = 0 ] || exit "$status"
+	date '+%Y-%m-%d %H:%M:%S.%N' >"$marker.tmp.$$"
+	mv -- "$marker.tmp.$$" "$marker"
+	echo "bb-backup: traces: mirrored into $output"
+	exit 0
+fi
+
+[ "$arg" != '' ] && [ "$sources" != '' ] || usage
+output="$arg"
+[ ! -e "$output" ] || [ -d "$output" ] || {
+	echo "bb-backup: output exists and is not a directory: $output" >&2
+	exit 1
+}
+
+# The staging tree mirrors the archive layout for the sqlite snapshots: a
+# database like /home/bb/.bb/bb.db is staged at home/bb/.bb/bb.db, exactly
+# where tar will place it and where unpacking over a fresh home will find it.
+staging="$(mktemp -d "${TMPDIR:-/tmp}/bb-backup.XXXXXX")"
+trap 'rm -rf -- "$staging"' EXIT HUP INT TERM
+
+for db in $sqlite_files; do
+	target="$staging/$(dirname -- "$db")"
+	mkdir -p -- "$target"
+	sqlite3 -- "$db" ".backup '$target/$(basename -- "$db")'"
+done
+
+name="backup-$(date +%Y%m%d-%H%M%S).tar.zst"
+tmp="$staging/$name"
+raw="$tmp.tar"
+
+# The plain tar is written to the staging directory first: appending the
+# snapshots is only possible on an uncompressed archive, and the final zstd
+# stream must be written once, then verified, then named. Nothing partial ever
+# appears in the output directory.
+# Word splitting on $sources and $sqlite_files is deliberate: they are
+# whitespace-separated path lists from the command line, and paths with
+# spaces in them are not supported.
+# shellcheck disable=SC2086
+tar -cf "$raw" $sources
+for db in $sqlite_files; do
+	# The staged snapshot path is stripped of its leading slash and passed relative,
+	# so no separator is needed.
+	tar -C "$staging" -rf "$raw" "$(printf '%s' "$db" | sed 's|^/||')"
+done
+zstd -q -9 -o "$tmp" -- "$raw"
+rm -f -- "$raw"
+
+verify_one "$tmp"
+
+mkdir -p -- "$output"
+chmod 0700 -- "$output"
+mv -- "$tmp" "$output/$name"
+echo "bb-backup: wrote $output/$name"
+
+if [ "$keep" -gt 0 ]; then
+	# Newest first; everything past the Nth goes. Only this script's own
+	# archives are considered, so other files in the directory are safe.
+	# shellcheck disable=SC2012,SC2010
+	for victim in $(
+		ls -1t -- "$output" | grep -E '^backup-[0-9]{8}-[0-9]{6}\.tar\.zst$' |
+			tail -n +"$((keep + 1))"
+	); do
+		rm -f -- "$output/$victim"
+	done
+fi

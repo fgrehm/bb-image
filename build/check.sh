@@ -19,6 +19,7 @@ fragments='10_ignorefiles.sh
 30_lint.sh
 40_baked_versions.sh
 50_shims.sh
+55_backup.sh
 60_fontconfig.sh
 70_chromium.sh
 71_chromium_writes.sh

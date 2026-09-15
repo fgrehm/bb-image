@@ -6,10 +6,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Fixed
+
+- First-use installs of lazy tools survive slow GitHub minutes. mise's default remote-version fetch timed out after 3s and cached the version list for only an hour, so `mise install <tool>` could fail outright against a slow api.github.com and retry more often than needed. The toolset now caches remote version lists for 24 hours and allows 15s per fetch. Shim invocations keep mise's hard-coded single ~3s attempt by design, so the residual warning noise on an uncached shim call is unchanged.
+
+## [0.2.0] - 2026-09-15
+
+Carries bb 0.43.1.
+
 ### Added
 
 - Home hydration. The container-level `~/.bb/AGENTS.md` (new in this release, see below) and the `mise activate` blocks in `~/.bashrc` and `~/.zshrc` live in the home volume, which is seeded from the image exactly once, so until now an existing volume never picked up later image updates. The entrypoint now reconciles them on every container start (`hydrate-home.sh`): a copy whose hash matches a version the image has shipped is replaced when the image moves on, a copy the user edited is left untouched, and the image's home is hydrated at build time too so a fresh volume is correct even for callers that bypass the entrypoint. The registry of shipped hashes lives at `/usr/local/share/bb`, outside the volume. A user edit is a permanent opt-out for that file; deleting it lets the image reinstall it.
 - A container-level `~/.bb/AGENTS.md` shipped in the image: bb appends it to the system prompt of every provider-backed thread, so agents get in-container guidance on the mise toolchain (lazy installs, project pins, the `/opt/mise` ownership rule, and that Playwright and its Chromium are baked and must not be reinstalled). Users can fine-tune their copy in the volume, and edits are kept by the hydration mechanism.
+- `bb-backup`, baked at `/usr/local/share/bb/bb-backup`, and `zstd` in the image. Subcommands, no default: `backup` tars the persistent state to a zstd archive, snapshots live SQLite databases (`~/.bb/bb.db` and friends) with `sqlite3 .backup` when named via `--sqlite` so the archive holds a consistent copy, verifies the archive (`zstd -t` plus a full `tar -tf` pass) before it is named so a corrupt or truncated archive never lands under the canonical name, re-runs the same check via `verify` for restore flows, and prunes with `--keep N`. `traces` mirrors pi sessions, bb logs, the pi bridge, and claude/codex state into an output directory with rsync, additively: no pruning or removal, only files newer than the last run, nanosecond marker precision, and `--flatten` for the `rsync src/* dest/` layout encrypted remote syncs want. Scheduling is deliberately not in the image: a host systemd user timer or a compose sidecar cron calls it (see README, Backups).
 
 ### Changed
 
@@ -29,7 +38,6 @@ Carries bb 0.43.1.
 
 ### Fixed
 
-- First-use installs of lazy tools survive slow GitHub minutes. mise's default remote-version fetch timed out after 3s and cached the version list for only an hour, so `mise install <tool>` could fail outright against a slow api.github.com and retry more often than needed. The toolset now caches remote version lists for 24 hours and allows 15s per fetch. Shim invocations keep mise's hard-coded single ~3s attempt by design, so the residual warning noise on an uncached shim call is unchanged.
 - Chromium keeps its fontconfig caches in `~/.cache/fontconfig` and nowhere else. A sandboxed agent running Playwright used to be denied a `chmod("/var/cache/fontconfig")` that fontconfig attempts on every browser launch, because Debian lists that root-owned directory first. The image now sets `FONTCONFIG_FILE` to `/usr/local/share/bb/fonts.conf`, which is Debian's file with the system cache directories removed, so that write is never attempted and the cache lands in the home volume. Rendering is unchanged; the claim is release-gated by an interposing shim (`build/fcshim.c`) that runs in `make check` and refuses a release on any fontconfig write outside the xdg cache.
 
 ### Known limitations
