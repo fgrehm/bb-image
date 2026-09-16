@@ -9,8 +9,33 @@ jobs = 4
 fetch_remote_versions_cache = "24h"
 fetch_remote_versions_timeout = "15s"
 
-[tools]
+[env]
+# Predictable cache paths, declared rather than left to per-tool defaults. The
+# point is sandboxing: a tool that probes or writes into a guessable path turns
+# every sandbox denial into a redundant prompt, and landlock-style sandboxes
+# (denied user-wide paths inside tool wrapper probing) turn ancestor probing
+# into noise (see pnpm#9246). Each path is {{ env.HOME }}-relative, expanded by
+# mise at runtime per container, so a derived image renaming the user via
+# `usermod -d` keeps working. The home volume is the right place: caches churn
+# and persist there, and nothing lands in image-owned /opt.
+#
+# Both pnpm prefixes are declared because pnpm >=12 reads pnpm_config_* and
+# <=10 (e.g. repo-pinned 9.x through packageManager) reads npm_config_. The
+# npm_config_ copy has a known cosmetic cost: npm itself warns about the
+# unknown config key on every direct run. That noise buys repo-pinned pnpm 9.x
+# the same store path as modern pnpm without per-repo rc files.
+npm_config_cache = "{{ env.HOME }}/.cache/npm"
+pnpm_config_store_dir = "{{ env.HOME }}/.cache/pnpm-store"
+npm_config_store_dir = "{{ env.HOME }}/.cache/pnpm-store"
+# Declared at their default locations, so a sandbox policy can name them as
+# checked-in configuration.
+CARGO_HOME = "{{ env.HOME }}/.cargo"
+GOPATH = "{{ env.HOME }}/go"
+GOMODCACHE = "{{ env.HOME }}/go/pkg/mod"
+GOCACHE = "{{ env.HOME }}/.cache/go-build"
+UV_CACHE_DIR = "{{ env.HOME }}/.cache/uv"
 
+[tools]
 # Installed at image build time. This is all bb itself needs to run.
 #
 # NOTE: node's version is duplicated as NODE_VERSION in the Containerfile, and the

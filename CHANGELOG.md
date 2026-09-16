@@ -15,6 +15,9 @@ Carries bb 0.43.1.
 - Checks are flavor-aware, and every variant must pass its own verification before a release ships: the build now boots bb behind the entrypoint in every flavor and asserts a clean stop, and slim refuses the full image's packages by inspection plus a size ceiling, so a slim build can never pass verification because it was run as full (identity is stamped as the `sh.bb.flavor` OCI label and the harness refuses a mismatch).
 
 ### Changed
+### Changed
+
+- Tool package-manager and compiler cache paths are now declared instead of left to each tool's default. They ship twice: as plain image ENVs (`npm_config_cache` now under `~/.cache/npm`, where npm used to own `~/.npm`; the pnpm store-dir under both `pnpm_config_*` and `npm_config_*` prefixes so repo-pinned pnpm 9.x and 12.x resolve identically; `CARGO_HOME`, `GOPATH`/`GOMODCACHE`/`GOCACHE`, `UV_CACHE_DIR`, and `TMPDIR=/tmp`), and as the same keys in the global mise config as `${HOME}`-relative entries resolved per container. The ENVs make the paths hold for every exec and shell; the mise entries make them correct for derived images that rename the user, which need to redeclare the ENVs only if the paths must be right outside mise contexts too. The motivation is sandbox-friendliness: checkable paths instead of per-tool probe noise (pnpm#9246's ancestor probing). For layouts that mount an existing home: existing caches remain where they are, and the declared paths simply start being used going forward.
 
 - The full image grew about 2MB (under 0.1%): packages moved into a second layer when the `foundation` stage was extracted, which doubles the dpkg metadata written at build time. Nothing else in the full image changed: same packages, users, environment, and command as 0.2.0.
 
