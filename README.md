@@ -8,8 +8,10 @@ Batteries included container image for running [bb](https://getbb.app), built to
 | --- | --- | --- |
 | `ghcr.io/fgrehm/bb` (also `full`, `latest`, the bb-version tags, and `img-<v>` pins) | Everything in [What's in the full image](#whats-in-the-full-image): Playwright + Chromium, dev tools, DB clients, document tools, backup tooling | The default bb server |
 | `ghcr.io/fgrehm/bb:slim` and version pins like `img-<v>-slim`, `0.43.1-slim` | Debian, node, bb, mise, lazy `pnpm` + agent CLIs. No Chromium, dev tools, DB clients, document tools, compilers, or sudo. ~925MB vs ~2,398MB | A small bb runtime you size up yourself |
-| `ghcr.io/fgrehm/bb:slim-sudo` and version pins like `img-<v>-slim-sudo` | slim plus passwordless sudo | Assembling an environment interactively |
-| `ghcr.io/fgrehm/bb:full-sudo` and version pins like `img-<v>-full-sudo` | the default image plus passwordless sudo | Long-lived development containers; also the bb-source contributor environment |
+| `ghcr.io/fgrehm/bb:0.43.1-slim-sudo` with `edge-slim-sudo` and `img-<v>-slim-sudo` moving alongside | slim plus passwordless sudo | Assembling an environment interactively |
+| `ghcr.io/fgrehm/bb:0.43.1-full-sudo` with `edge-full-sudo` and `img-<v>-full-sudo` moving alongside | the default image plus passwordless sudo | Long-lived development containers; also the bb-source contributor environment |
+
+The moving aliases are `latest` (which means full) and bare `slim`; the sudo flavors deliberately have no bare alias and are reached through their suffix pins, of which the three forms are `edge-<variant>` (the current `main` build), `0.43.1-<variant>` (the current baked bb), and `img-<version>-<variant>` (a frozen release by the image's own version).
 
 Versioned tags carry a variant suffix (`0.43.1-slim`, `img-0.3.0-full-sudo`); the unsuffixed tags always mean `full`. Internally the container has sudo only: apt packages and mise tools installed at runtime live with the container and vanish when a disposable one stops, so sudo flavors want a named home volume and a non-`--rm` run.
 
@@ -25,7 +27,7 @@ The unsuffixed `latest`, `edge`, and bb-version tags stay on the full image; not
 - A UTF-8 locale (`LANG=C.UTF-8`) and `EDITOR`/`VISUAL` pointing at `vi`, so `git commit` without `-m` and `git rebase -i` work
 - mise-managed toolchains, agent CLIs, and prek, installed on first use
 - `$HOME` as the working directory, since bb hosts many projects and resolves them by path
-- A container-level `~/.bb/AGENTS.md` that bb appends to the system prompt of every provider-backed thread, telling agents how the mise toolchain works (lazy installs, project pins, the `/opt/mise` ownership rule) and that Playwright and its Chromium are baked and must not be reinstalled. Edits you make to your copy are kept; unmodified copies are kept current
+- A container-level `~/.bb/AGENTS.md` that bb appends to the system prompt of every provider-backed thread, telling agents how the mise toolchain works (lazy installs, project pins, the `/opt/mise` ownership rule, and that what is baked varies by image flavor: check before assuming a tool is there). Edits you make to your copy are kept; unmodified copies are kept current
 - Home hydration: `~/.bb/AGENTS.md` and the `mise activate` blocks in `~/.bashrc` and `~/.zshrc` are image-managed, and a named volume is seeded from the image only once, so the entrypoint hydrates them on every container start. A copy the image shipped (recognised by hash) is replaced when the image moves on; a copy you edited is left untouched
 - Almost nothing heavy in `$HOME` at first boot. The toolchain is at `/opt/mise` and the Playwright browsers at `/opt/ms-playwright`, so the home volume is seeded with kilobytes rather than gigabytes. Caches are the exception, and they are meant to be there: at runtime npm writes `~/.npm` and mise writes `~/.cache/mise`, both inside the home volume, so they survive a container recreate
 
@@ -123,9 +125,13 @@ Mounting the host's agent config means the container's CLI version writes state 
 
 ```bash
 make ci FLAVOR=full-sudo TAG=full-sudo
+# Exported, not an argument: the value stays out of podman's argv and any
+# process list on the host.
+export MISE_GITHUB_TOKEN
+MISE_GITHUB_TOKEN="$(gh auth token 2>/dev/null)"
 podman run -d --name bb-dev \
 	--userns=keep-id \
-	--env MISE_GITHUB_TOKEN="$(gh auth token 2>/dev/null)" \
+	--env MISE_GITHUB_TOKEN \
 	-v ~/src/bb:/home/developer/src:Z \
 	-v bb-dev-home:/home/developer \
 	ghcr.io/fgrehm/bb:img-<version>-full-sudo sleep infinity

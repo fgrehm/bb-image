@@ -12,19 +12,26 @@
 say "bb boots behind the entrypoint, and stopping it exits cleanly"
 
 # Unique per invocation, so a colliding name deletes only what this run
-# created, never a pre-existing container left by an interrupted run.
+# created, never a pre-existing container left by an interrupted run. The
+# cleanup stays unarmed until the run has actually created the container, so a
+# name collision fails without touching the other container.
 name=""
+created=0
 cleanup() {
-	[ -n "$name" ] &&
+	[ "$created" = 1 ] &&
 		"$ENGINE" rm -f "$name" >/dev/null 2>&1 ||
 		return 0
 }
 trap cleanup EXIT
 name="bb-check-startstop-$$"
 
-"$ENGINE" run -d \
+if ! "$ENGINE" run -d \
 	--name "$name" \
-	"$img" >/dev/null
+	"$img" >/dev/null; then
+	echo "the engine refused to start the check container on name $name" >&2
+	exit 1
+fi
+created=1
 
 ready=0
 for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do

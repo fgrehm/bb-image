@@ -114,7 +114,11 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=edge${{ matrix.suffix }},enable=${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+            # ref==main rather than event==push: a manual dispatch defaults to
+            # main, and a dispatch run is as much a publish as a push is; with
+            # event_name in the condition it would build and push with no tags
+            # at all.
+            type=raw,value=edge${{ matrix.suffix }},enable=${{ github.ref == 'refs/heads/main' }}
             # Image pin: every tag, prereleases included.
             type=raw,value=img-${{ env.IMAGE_VERSION }}${{ matrix.suffix }},enable=${{ github.ref_type == 'tag' }}
             # bb aliases, latest, and the bare slim alias: stable tags only. A

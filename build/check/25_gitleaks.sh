@@ -10,8 +10,16 @@
 # scan 95_token_scan is its counterpart on the built image's filesystem, where
 # the forwarded build token is the one input that must be absent.
 say "the repo tree and its full history carry no leaked secrets"
+# Git refuses a repository owned by another uid ('dubious ownership'), which is
+# exactly a Docker bind mount into this container on a CI runner, where the
+# repo owner's uid is not the container uid. The config is passed as
+# environment variables rather than written to /etc, so nothing of the scan
+# writes anywhere.
 crun --volume "$root:/src:ro" <<'SH'
 set -eu
+export GIT_CONFIG_COUNT=1
+export GIT_CONFIG_KEY_0=safe.directory
+export GIT_CONFIG_VALUE_0=/src
 gitleaks git --no-banner /src
 gitleaks dir --no-banner /src
 echo "no leaks in history or tree"
