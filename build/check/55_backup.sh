@@ -2,6 +2,7 @@
 # img, root and say/crun come from there (SC2148/SC2154 handled here).
 # shellcheck shell=sh disable=SC2154,SC2148
 # shellcheck source=build/check/lib.sh
+# check-flavors: full
 
 # The baked backup script: a backup with a live sqlite snapshot must produce a
 # verified archive, retention must prune, a corrupted archive must fail the

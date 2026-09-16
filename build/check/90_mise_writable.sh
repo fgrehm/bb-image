@@ -2,6 +2,7 @@
 # img, root and say/crun come from there (SC2148/SC2153/SC2154 handled here).
 # shellcheck shell=sh disable=SC2154,SC2148
 # shellcheck source=build/check/lib.sh
+# check-flavors: full slim slim-sudo full-sudo
 
 # The invariant derived images depend on: the mise data dir is developer-owned
 # and writable, so derived images can add tools and they stay usable. Run with

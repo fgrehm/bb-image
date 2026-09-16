@@ -2,6 +2,7 @@
 # img, root and say/crun come from there (SC2148/SC2153/SC2154 handled here).
 # shellcheck shell=sh disable=SC2154,SC2148
 # shellcheck source=build/check/lib.sh
+# check-flavors: full slim slim-sudo full-sudo
 
 # Three exit codes, because the scan has to fail closed on its own failures:
 # 0 means no match, 3 means a file matched (a leak, printed as hits), anything

@@ -2,6 +2,13 @@ IMAGE ?= bb
 TAG ?= dev
 ENGINE ?= podman
 
+# Containerfile stage to build, passed as --target. Empty builds the final
+# stage, which is today's single image; set it explicitly once the Containerfile
+# grows named stages (foundation, slim, ...). The check side keys off FLAVOR
+# instead: which capability set build/check.sh should verify.
+TARGET ?=
+FLAVOR ?= full
+
 # Read from the Containerfile so a release tag states the bb version without it
 # having to be repeated on the command line.
 BB_VERSION := $(shell sed -n 's/^ARG BB_VERSION=\(.*\)/\1/p' container/Containerfile)
@@ -74,7 +81,7 @@ RUN_ARGS ?=
 .PHONY: build check ci fonts-regen hack run release
 
 build:
-	$(ENGINE) build -f container/Containerfile -t $(IMAGE):$(TAG) $(BUILD_SECRET) .
+	$(ENGINE) build -f container/Containerfile $(if $(TARGET),--target $(TARGET)) -t $(IMAGE):$(TAG) $(BUILD_SECRET) .
 
 # All verification now lives here, run against the built image: behavioural
 # checks (launch smoke, fontconfig override, first-use install, home size) in
@@ -84,7 +91,7 @@ build:
 # while anything here fails. Forwarded token works the same way it does for
 # build: GH_TOKEN, then GITHUB_TOKEN, then `gh auth token`.
 check:
-	IMAGE=$(IMAGE) TAG=$(TAG) ENGINE=$(ENGINE) build/check.sh
+	IMAGE=$(IMAGE) TAG=$(TAG) ENGINE=$(ENGINE) FLAVOR=$(FLAVOR) build/check.sh
 
 # Build then verify, in one target: the sequence CI runs (its build and check
 # steps are separate because buildx's GHA cache and the image attestations live
@@ -92,7 +99,7 @@ check:
 # artifact), but spelled once so nobody drifts between building and checking.
 # Use `make ci` locally; CI still splits only for the cache/attestation split.
 ci: build
-	IMAGE=$(IMAGE) TAG=$(TAG) ENGINE=$(ENGINE) build/check.sh
+	IMAGE=$(IMAGE) TAG=$(TAG) ENGINE=$(ENGINE) FLAVOR=$(FLAVOR) build/check.sh
 
 # Regenerates container/fonts.conf from the distro fontconfig inside the image;
 # the thing to do after a font package bump moves /etc/fonts/fonts.conf. The

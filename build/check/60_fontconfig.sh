@@ -2,6 +2,7 @@
 # img, root and say/crun come from there (SC2148/SC2153/SC2154 handled here).
 # shellcheck shell=sh disable=SC2154,SC2148
 # shellcheck source=build/check/lib.sh
+# check-flavors: full
 
 # Runtime view of the Containerfile's fontconfig override: the shipped
 # fonts.conf has to match Debian's (drift guard, run first), fc-cache must name
