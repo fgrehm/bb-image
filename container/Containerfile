@@ -386,6 +386,12 @@ RUN bash /usr/local/share/bb/hydrate-home.sh stamp \
 
 CMD ["bash", "/home/developer/entrypoint.sh"]
 
+# Identity marker: the check harness refuses to run this image's checks as
+# another flavor, so a slim build can never pass because it was verified as
+# full, and vice versa. sudo stages stamp their own flavor over the one they
+# inherit.
+LABEL sh.bb.flavor="full"
+
 # ---------------------------------------------------------------------------
 # slim: the small extensible bb runtime. Node, packaged bb, lazy pnpm and the
 # coding-agent CLIs through mise, the entrypoint, and the hydration machinery.
@@ -479,6 +485,12 @@ RUN bash /usr/local/share/bb/hydrate-home.sh stamp \
 
 CMD ["bash", "/home/developer/entrypoint.sh"]
 
+# Identity marker: the check harness refuses to run this image's checks as
+# another flavor, so a slim build can never pass because it was verified as
+# full, and vice versa. sudo stages stamp their own flavor over the one they
+# inherit.
+LABEL sh.bb.flavor="slim"
+
 # ---------------------------------------------------------------------------
 # slim-sudo: everything in slim, plus passwordless sudo, so an agent can add
 # apt packages, system users or anything else an interactive environment
@@ -503,6 +515,12 @@ USER $USERNAME
 # Same default command as the flavor below it; only the launch policy differs.
 CMD ["bash", "/home/developer/entrypoint.sh"]
 
+# Identity marker: the check harness refuses to run this image's checks as
+# another flavor, so a slim build can never pass because it was verified as
+# full, and vice versa. sudo stages stamp their own flavor over the one they
+# inherit.
+LABEL sh.bb.flavor="slim-sudo"
+
 # ---------------------------------------------------------------------------
 # full-sudo: the batteries-included work environment plus passwordless sudo,
 # for long-lived development containers and bb source development.
@@ -521,6 +539,12 @@ COPY --chmod=0440 container/sudoers-developer /etc/sudoers.d/developer
 USER $USERNAME
 
 CMD ["bash", "/home/developer/entrypoint.sh"]
+
+# Identity marker: the check harness refuses to run this image's checks as
+# another flavor, so a slim build can never pass because it was verified as
+# full, and vice versa. sudo stages stamp their own flavor over the one they
+# inherit.
+LABEL sh.bb.flavor="full-sudo"
 
 # ---------------------------------------------------------------------------
 # Final alias. Bare builds (no --target) and TARGET=release produce the same

@@ -6,6 +6,26 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+Carries bb 0.43.1.
+
+### Added
+
+- Image variants, built from one shared `foundation` stage of the same Containerfile. `full` is what `bb`, `latest` and every unsuffixed tag has always meant, unchanged. New: `slim` (node, bb, mise, lazy pnpm and the agent CLIs; no Chromium, dev tools, DB clients, document tools, compilers or sudo; about 925MB against full's around 2,400MB), `slim-sudo` and `full-sudo` (the matching flavor plus passwordless sudo). Published tags carry the variant suffix (`0.43.1-slim`, `img-<version>-full-sudo`, `edge-slim`); the unsuffixed aliases stay on full, and `latest` and `slim` are the two moving aliases. Foundation itself is internal and is not published.
+- Checks are flavor-aware, and every variant must pass its own verification before a release ships: the build now boots bb behind the entrypoint in every flavor and asserts a clean stop, and slim refuses the full image's packages by inspection plus a size ceiling, so a slim build can never pass verification because it was run as full (identity is stamped as the `sh.bb.flavor` OCI label and the harness refuses a mismatch).
+
+### Changed
+
+- The full image grew about 2MB (under 0.1%): packages moved into a second layer when the `foundation` stage was extracted, which doubles the dpkg metadata written at build time. Nothing else in the full image changed: same packages, users, environment, and command as 0.2.0.
+
+### Security
+
+- Passwordless sudo is opt-in and confined to the rootless container. The sudo flavors must be launched without `no-new-privileges` (the make targets derive that flag from the chosen flavor automatically); the standard full and slim profiles keep it.
+
+### Known limitations
+
+- linux/amd64 and rootless Podman remain the tested scope.
+- Runtime apt packages and mise tools live with the container: a `--rm` run loses them when it stops, so the sudo flavors and any interactively extended environment want a named home volume and a long-lived container.
+
 ## [0.2.0] - 2026-09-15
 
 Carries bb 0.43.1.

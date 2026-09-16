@@ -29,17 +29,26 @@ env:
   # means adding a docker/setup-qemu-action step; emulation is the only reason
   # that step exists, and it is dead weight while the platform list stays native.
   PLATFORMS: linux/amd64
+  # The published image family. The Containerfile stages and the check flavors
+  # use the same names; the majority of the steps are identical per flavor.
+  FLAVORS: full slim slim-sudo full-sudo
 
 jobs:
   publish:
     runs-on: ubuntu-latest
+    strategy:
+      # A variant that fails blocks the release: do not publish full while a
+      # variant someone depends on failed its own verification.
+      fail-fast: false
+      matrix:
+        flavor: [full, slim, slim-sudo, full-sudo]
     permissions:
       contents: write
       packages: write
       id-token: write
       attestations: write
     steps:
-      # Full history and tags: the release step reads the previous release's bb
+      # Full history and tags: the release job reads the previous release's bb
       # version out of the Containerfile at the last tag.
       - uses: actions/checkout@v7
         with:
@@ -78,24 +87,37 @@ jobs:
             echo "IMAGE_VERSION=${GITHUB_REF_NAME#v}"
             echo "NODE_VERSION=$(read_arg NODE_VERSION)"
             echo "MISE_VERSION=$(read_arg MISE_VERSION)"
+            # Tag suffix for the metadata step: full keeps the unsuffixed tags
+            # it has always had, every other flavor appends its name. An empty
+            # value must not be substituted away, hence the trailing space.
+            echo "SUFFIX=${{ matrix.flavor == 'full' && '' || format('-{0}', matrix.flavor) }}"
           } >> "$GITHUB_ENV"
 
-          echo "bb ${bb}, image ${GITHUB_REF_NAME#v}"
+          echo "bb ${bb}, image ${GITHUB_REF_NAME#v}, flavor ${{ matrix.flavor }}"
 
+      # Tag suffixes follow the variant: full keeps the unsuffixed tags it has
+      # always had (and `latest`), every other flavor appends its name. The bare
+      # `slim` alias mirrors `latest` for people who run the smaller image with
+      # the same unpinned habit; full is the only image behind `latest` itself.
+      # A prerelease moves none of the aliases.
       - name: Derive tags
         id: meta
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          flavor: |
+            suffix=${{ env.SUFFIX }}
           tags: |
             type=edge,branch=main
             # Image pin: every tag, prereleases included.
             type=raw,value=img-${{ env.IMAGE_VERSION }},enable=${{ github.ref_type == 'tag' }}
-            # bb aliases and latest: stable tags only. A prerelease must not move
-            # the aliases people pin, or an rc would silently become "latest".
+            # bb aliases, latest, and the bare slim alias: stable tags only. A
+            # prerelease must not move the aliases people pin, or an rc would
+            # silently become "latest".
             type=raw,value=${{ env.BB_VERSION }},enable=${{ github.ref_type == 'tag' && !contains(github.ref_name, '-') }}
             type=raw,value=${{ env.BB_MINOR }},enable=${{ github.ref_type == 'tag' && !contains(github.ref_name, '-') }}
-            type=raw,value=latest,enable=${{ github.ref_type == 'tag' && !contains(github.ref_name, '-') }}
+            type=raw,value=latest,enable=${{ github.ref_type == 'tag' && matrix.flavor == 'full' && !contains(github.ref_name, '-') }}
+            type=raw,value=slim,enable=${{ github.ref_type == 'tag' && matrix.flavor == 'slim' && !contains(github.ref_name, '-') }}
 
       # Build without pushing first, so the verification step below can run
       # against the image it will gate. The push step re-runs the build against
@@ -108,17 +130,20 @@ jobs:
           # Not Dockerfile. buildx does not auto-detect Containerfile the way
           # podman does, so this has to be set explicitly.
           file: container/Containerfile
+          # One matrix flavor per target; the stages share the foundation layers,
+          # so a warm cache carries over between matrix jobs.
+          target: ${{ matrix.flavor }}
           platforms: ${{ env.PLATFORMS }}
           # Same labels as the push build: otherwise labels would change the
           # image config digest between verify and push, and the verified
           # artifact would not be the published one even on a full cache hit.
           labels: ${{ steps.meta.outputs.labels }}
           # Loaded into the local docker store so build/check.sh can run it.
-          # One staging tag: buildx does not reliably export multiple tags with
-          # load, and this one never leaves the runner.
+          # One staging tag per flavor: buildx does not reliably export multiple
+          # tags with load, and this one never leaves the runner.
           push: false
           load: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:staged
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:staged-${{ matrix.flavor }}
           build-args: |
             BB_VERSION=${{ env.BB_VERSION }}
           # Authenticates mise's GitHub API calls, which otherwise run unauthenticated at
@@ -131,37 +156,41 @@ jobs:
           cache-to: type=gha,mode=max
 
       # Everything verification-shaped lives here: the Containerfile has no
-      # assertion RUNs any more. build/check.sh runs the behavioural checks
-      # (launch smoke, fontconfig drift and parity, first-use installs, token
-      # leak, home size) against the image that just built, and runs before the
-      # push step below, so nothing ships while these fail. Runs on main too:
-      # :edge is a publish just the same, and the checks are the only place
-      # fontconfig drift can still be caught.
+      # assertion RUNs any more. build/check.sh runs the flavor-matching
+      # behavioral checks (launch smoke, fontconfig drift and parity, first-use
+      # installs, token leak, home size) against the image that just built, and
+      # refuses an image whose sh.bb.flavor marker disagrees — a slim build
+      # cannot pass because it was verified as full. Runs before the push step
+      # below, so nothing ships while these fail. Runs on main too: :edge is a
+      # publish just the same, and the checks are the only place fontconfig
+      # drift can still be caught.
       - name: Verify image
         # Runs against the staged image from the build step, in docker (the
         # runner's engine; podman is not preinstalled there).
         run: make check ENGINE=docker
         env:
           IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          TAG: staged
+          TAG: staged-${{ matrix.flavor }}
+          FLAVOR: ${{ matrix.flavor }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       # The second build re-verifies and pushes. Both builds share the same
-      # context, file, platforms, build-args, secrets AND labels, so an ordinary
-      # cache hit reuses the exact filesystem layers that were verified; the
-      # verified filesystem is what ships. The push build additionally produces
-      # provenance and sbom attestations (which wrap manifest structure, not
-      # layer bytes), so a literal artifact-identity guarantee would need that
-      # step to become a push of the staged artifact instead of a rebuild.
-      # A mid-run GHA cache eviction would re-execute RUNs and is the residual
-      # risk the cache argument carries; the unpinned `latest` tools are lazy,
-      # so they install nothing at build time and cannot diverge.
-
+      # context, file, target, platforms, build-args, secrets AND labels, so an
+      # ordinary cache hit reuses the exact filesystem layers that were
+      # verified; the verified filesystem is what ships. The push build
+      # additionally produces provenance and sbom attestations (which wrap
+      # manifest structure, not layer bytes), so a literal artifact-identity
+      # guarantee would need that step to become a push of the staged artifact
+      # instead of a rebuild. A mid-run GHA cache eviction would re-execute
+      # RUNs and is the residual risk the cache argument carries; the
+      # unpinned `latest` tools are lazy, so they install nothing at build
+      # time and cannot diverge.
 
       - name: Build and push
         uses: docker/build-push-action@v7
         with:
           context: .
           file: container/Containerfile
+          target: ${{ matrix.flavor }}
           platforms: ${{ env.PLATFORMS }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
@@ -175,15 +204,73 @@ jobs:
           provenance: true
           sbom: true
 
-      # States the bb move explicitly, since that is what users actually care
-      # about and a git tag cannot express it. Re-runs leave an existing release
-      # alone rather than failing.
-      - name: Create GitHub release
-        if: github.ref_type == 'tag'
+  # States the bb move explicitly, since that is what users actually care
+  # about and a git tag cannot express it. Depends on every publish job, so no
+  # release notes appear while a variant is missing or failed. Re-runs leave
+  # an existing release alone rather than failing.
+  release:
+    if: github.ref_type == 'tag'
+    needs: [publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Resolve versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          bb="$(sed -n 's/^ARG BB_VERSION=\(.*\)/\1/p' container/Containerfile)"
+          [ -n "$bb" ] || { echo "could not read BB_VERSION from the Containerfile" >&2; exit 1; }
+          {
+            echo "BB_VERSION=$bb"
+            echo "IMAGE_VERSION=${GITHUB_REF_NAME#v}"
+          } >> "$GITHUB_ENV"
+
+      - name: List published tags
+        id: published
         shell: bash
         env:
+          FLAVORS: ${{ env.FLAVORS }}
+        run: |
+          set -euo pipefail
+          # The set of tags another variant deduplicates, mirroring the
+          # metadata-action rules above. A stable tag also feeds the aliases;
+          # a prerelease gets an image pin and variant pins only.
+          stable=true
+          if [[ "${GITHUB_REF_NAME}" == *-* ]]; then stable=false; fi
+          {
+            for flavor in $FLAVORS; do
+              suffix=""
+              [ "$flavor" = full ] || suffix="-${flavor}"
+              echo "img-${IMAGE_VERSION}${suffix}"
+              # bb aliases, latest, slim: stable tags only. full is unsuffixed.
+              if $stable; then
+                echo "${BB_VERSION}${suffix}"
+                echo "${BB_VERSION%.*}${suffix}"
+                [ "$flavor" = full ] && echo "latest"
+                [ "$flavor" = slim ] && echo "slim"
+              fi
+            done
+          } | sort -u | grep -v '^$' > /tmp/names.txt
+
+          # If any single job failed the release job never starts, but a main
+          # push that produced no tag must not fail this script either: on
+          # a prerelease, the aliases are simply absent.
+          {
+            echo "tags<<EOF"
+            sed "s|^|${REGISTRY}/${IMAGE_NAME}:|" /tmp/names.txt
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub release
+        env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PUBLISHED: ${{ steps.meta.outputs.tags }}
+          TAGS: ${{ steps.published.outputs.tags }}
         run: |
           set -euo pipefail
 
@@ -211,19 +298,18 @@ jobs:
             bb_line="bb ${prev_bb} -> ${BB_VERSION}"
           fi
 
-          notes="$(printf '%s\n' \
-            "$bb_line" \
-            "image ${IMAGE_VERSION}" \
-            "" \
-            "node ${NODE_VERSION}, mise ${MISE_VERSION}" \
-            "" \
-            "published:" \
-            $(printf '  %s\n' $PUBLISHED))"
+          {
+            printf '%s\n' "$bb_line"
+            printf 'image %s\n' "$IMAGE_VERSION"
+            printf '\n'
+            printf '%s\n' "published:"
+            while IFS= read -r t; do printf '  %s\n' "$t"; done <<<"$TAGS"
+          } > /tmp/notes.txt
 
           if [ "${IMAGE_VERSION}" != "${IMAGE_VERSION%-*}" ]; then
             gh release create "$tag" --prerelease \
-              --title "${tag} (bb ${BB_VERSION})" --notes "$notes"
+              --title "${tag} (bb ${BB_VERSION})" --notes-file /tmp/notes.txt
           else
             gh release create "$tag" \
-              --title "${tag} (bb ${BB_VERSION})" --notes "$notes"
+              --title "${tag} (bb ${BB_VERSION})" --notes-file /tmp/notes.txt
           fi

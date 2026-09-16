@@ -2,7 +2,20 @@
 
 Batteries included container image for running [bb](https://getbb.app), built to run rootless on your own machine with your data, logins, and projects mounted in.
 
-## What's in it
+## Variants
+
+| Tags | What it carries | For |
+| --- | --- | --- |
+| `bb` (also `full`, `latest`, version tags) | Everything in [What's in it](#whats-in-it): Playwright + Chromium, dev tools, DB clients, document tools, backup tooling | The default bb server |
+| `bb-slim` / `bb:img-<v>-slim` | Debian, node, bb, mise, lazy `pnpm` + agent CLIs. No Chromium, dev tools, DB clients, document tools, compilers, or sudo. ~925MB vs ~2,398MB | A small bb runtime you size up yourself |
+| `bb-slim-sudo` / `bb:img-<v>-slim-sudo` | slim plus passwordless sudo | Assembling an environment interactively |
+| `bb-full-sudo` / `bb:img-<v>-full-sudo` | the default image plus passwordless sudo | Long-lived development containers; also the bb-source contributor environment |
+
+Versioned tags carry a variant suffix (`0.43.1-slim`, `img-0.3.0-full-sudo`); the unsuffixed tags always mean `full`. Internally the container has sudo only: apt packages and mise tools installed at runtime live with the container and vanish when a disposable one stops, so sudo flavors want a named home volume and a non-`--rm` run.
+
+The unsuffixed `latest`, `edge`, and bb-version tags stay on the full image; nothing about those tags changes. The full and slim non-sudo images keep the `no-new-privileges` security flag (`make run` and `make hack` set it), and the `-sudo` flavors are run without it (the Makefile derives it) because passwordless sudo depends on setuid. Choosing a sudo flavor means choosing that posture: the container itself is still rootless, but give it nothing you mind it owning (no host ssh keys mount, no podman socket, no broad host paths).
+
+## What's in the full image
 
 - Debian 13 slim, pinned by digest, running as an unprivileged `developer` user (uid/gid 1000)
 - Node.js, bb, and Playwright with Chromium installed at build time, so the image can serve and drive a browser without a first-run download

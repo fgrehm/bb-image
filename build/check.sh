@@ -26,6 +26,15 @@ known_flavors='full slim slim-sudo full-sudo'
 
 flavor="${FLAVOR:-full}"
 export FLAVOR="$flavor"
+
+# Identity gate: every variant stage stamps sh.bb.flavor, and the runner
+# refuses an image marked as another flavor. An old image (built before the
+# marker existed) is as useless for verification as a mismatched one.
+marker="$($ENGINE image inspect "$img" --format '{{ index .Config.Labels "sh.bb.flavor" }}')"
+[ "$marker" = "$flavor" ] || {
+	echo "image $img is marked '$marker' (or unmarked), but $flavor checks were requested; build with make build FLAVOR=$flavor TAG=$TAG" >&2
+	exit 1
+}
 case " $known_flavors " in
 *" $flavor "*) ;;
 *)
