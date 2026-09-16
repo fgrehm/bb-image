@@ -1,0 +1,14 @@
+# Passwordless sudo for the container user (developer).
+#
+# Deliberately broad: these flavors exist so agents and users can elevate
+# inside the rootless container, including for apt packages, system users, and
+# service management under the container's own limits. The launch side is the
+# real boundary: sudo images are started without --security-opt no-new-privileges
+# (the Makefile derives that flag from the FLAVOR), and the rootless container
+# is what keeps host access bounded.
+#
+# Fine-grained rules were rejected on purpose. A sudoers file that grants every
+# command except something is a maze agents will trip over, and the real
+# boundary is outside the container: never run a sudo image with a sensitive
+# host mount or a podman socket mounted into it.
+developer ALL=(ALL) NOPASSWD: ALL

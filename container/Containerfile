@@ -480,6 +480,49 @@ RUN bash /usr/local/share/bb/hydrate-home.sh stamp \
 CMD ["bash", "/home/developer/entrypoint.sh"]
 
 # ---------------------------------------------------------------------------
+# slim-sudo: everything in slim, plus passwordless sudo, so an agent can add
+# apt packages, system users or anything else an interactive environment
+# assembly needs. Launching it is a deliberate security step down: passwordless
+# sudo means setuid works, so the container must be started WITHOUT
+# --security-opt no-new-privileges (the Makefile derives that flag from the
+# flavor). Host access stays bounded by the rootless container itself.
+# ---------------------------------------------------------------------------
+
+FROM slim AS slim-sudo
+
+ARG USERNAME
+
+USER root
+RUN set -e; \
+    apt-get update \
+    && apt-get install -y --no-install-recommends sudo \
+    && rm -rf /var/lib/apt/lists/*
+COPY --chmod=0440 container/sudoers-developer /etc/sudoers.d/developer
+USER $USERNAME
+
+# Same default command as the flavor below it; only the launch policy differs.
+CMD ["bash", "/home/developer/entrypoint.sh"]
+
+# ---------------------------------------------------------------------------
+# full-sudo: the batteries-included work environment plus passwordless sudo,
+# for long-lived development containers and bb source development.
+# ---------------------------------------------------------------------------
+
+FROM full AS full-sudo
+
+ARG USERNAME
+
+USER root
+RUN set -e; \
+    apt-get update \
+    && apt-get install -y --no-install-recommends sudo \
+    && rm -rf /var/lib/apt/lists/*
+COPY --chmod=0440 container/sudoers-developer /etc/sudoers.d/developer
+USER $USERNAME
+
+CMD ["bash", "/home/developer/entrypoint.sh"]
+
+# ---------------------------------------------------------------------------
 # Final alias. Bare builds (no --target) and TARGET=release produce the same
 # artifact: the default full image behind today's unsuffixed tags. A stage with
 # no instructions adds nothing; it exists so that naming a target explicitly

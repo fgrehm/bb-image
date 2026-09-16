@@ -13,12 +13,22 @@ say "slim does not carry the full image's batteries"
 # database rather than PATH for what cannot be seen in PATH.
 crun --user root <<'SH'
 set -eu
-for c in playwright sudo psql sqlite3 rg jq fd nvim tmux git-lfs shellcheck shfmt vi vim bb-backup go; do
+for c in playwright psql sqlite3 rg jq fd nvim tmux git-lfs shellcheck shfmt vi vim bb-backup go; do
 	if command -v "$c" >/dev/null 2>&1; then
 		echo "slim carries '$c', which belongs to the full image" >&2
 		exit 1
 	fi
 done
+# sudo exists only in the sudo flavors; for a plain slim build it must be absent.
+case " $FLAVOR " in
+	*" slim-sudo "*) ;;
+	*)
+		command -v sudo >/dev/null 2>&1 && {
+			echo "slim carries sudo; only the sudo flavors may" >&2
+			exit 1
+		}
+		;;
+esac
 for path in /opt/ms-playwright /usr/local/share/bb/bb-backup \
 	/usr/local/share/bb/fonts.conf; do
 	[ -e "$path" ] && {

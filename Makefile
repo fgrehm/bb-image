@@ -2,11 +2,11 @@ IMAGE ?= bb
 TAG ?= dev
 ENGINE ?= podman
 
-# Containerfile stage to build, passed as --target. Empty builds the final
-# stage, which is today's single image; set it explicitly once the Containerfile
-# grows named stages (foundation, slim, ...). The check side keys off FLAVOR
-# instead: which capability set build/check.sh should verify.
-TARGET ?=
+# Containerfile stage to build, passed as --target. Defaults to the flavor so
+# that `make build FLAVOR=slim` builds what `make check FLAVOR=slim` checks.
+# Empty builds the final release stage, the full image behind today's
+# unsuffixed tags.
+TARGET ?= $(FLAVOR)
 FLAVOR ?= full
 
 # Read from the Containerfile so a release tag states the bb version without it
@@ -53,8 +53,16 @@ USERNS ?= --userns=keep-id
 # chsh, chfn, gpasswd, newgrp, umount, and openssh's ssh-keysign) and none of it serves
 # this image's purpose, so agents should not be able to parlay it into container root.
 # Bubblewrap is unaffected, because creating a user namespace is not a privilege gain.
-# Override with SECURITY_OPTS= if you need su inside.
+#
+# sudo flavors cannot take this flag: passwordless sudo is setuid and stops
+# working under no-new-privileges. Choosing a -sudo FLAVOR is choosing the
+# security posture, and the flag disappears with it. Override with SECURITY_OPTS=
+# if you need su inside a standard profile.
+ifeq (,$(findstring -sudo,$(FLAVOR)))
 SECURITY_OPTS ?= --security-opt no-new-privileges
+else
+SECURITY_OPTS ?=
+endif
 
 # Forward a GitHub token so mise's API calls are authenticated. Unauthenticated, mise
 # gets 60 requests per hour against 1000 with a token, which is the difference between an
