@@ -10,16 +10,15 @@
 # they are hydrated on every container start by hydrate-home.sh against a
 # registry shipped outside the volume. This fragment asserts both the shipped
 # state and the mechanism itself: fresh installs, our stale copies updated, and
-# user-edited copies left alone.
+# user-edited copies left alone. The guidance is one source for every flavor,
+# deliberately: it keeps a hash chain shared across a container that moved from
+# full to slim (or back) so hydration replaces the image's own wording instead
+# of preserving either copy or feeding newly particular guidance.
 say "AGENTS.md shipped with the mise guidance; registry stamped; home hydrated at build"
 crun --user developer <<'SH'
 set -eu
 share=/usr/local/share/bb
-case " $FLAVOR " in
-	*" full "* | *" full-sudo "*) agents_source=agents.md ;;
-	*) agents_source=agents-slim.md ;;
-esac
-for f in "$agents_source" managed.tsv managed-prev.tsv hydrate-home.sh rc-bash.sh rc-zsh.sh; do
+for f in agents.md managed.tsv managed-prev.tsv hydrate-home.sh rc-bash.sh rc-zsh.sh; do
 	test -f "$share/$f"
 done
 for phrase in \
@@ -27,27 +26,11 @@ for phrase in \
 	'mise use <tool>@<version>' \
 	'mise trust' \
 	'/opt/mise' \
-	'mise reshim'; do
-	grep -qF "$phrase" "$share/$agents_source" ||
+	'mise reshim' \
+	'What is baked varies by image flavor'; do
+	grep -qF "$phrase" "$share/agents.md" ||
 		{ echo "AGENTS.md is missing expected content: $phrase" >&2; exit 1; }
 done
-# Guidance may promise only what the image carries: the full flavors bake
-# Playwright's Chromium and the fontconfig override, and every other flavor
-# must not mention either.
-case " $FLAVOR " in
-	*" full "* | *" full-sudo "*)
-		for phrase in '/opt/ms-playwright' 'FONTCONFIG_FILE'; do
-			grep -qF "$phrase" "$share/$agents_source" ||
-				{ echo "AGENTS.md is missing expected content: $phrase" >&2; exit 1; }
-		done
-		;;
-	*)
-		for phrase in '/opt/ms-playwright' 'FONTCONFIG_FILE' 'Playwright'; do
-			grep -qF "$phrase" "$share/$agents_source" &&
-				{ echo "AGENTS.md promises full-image content: $phrase" >&2; exit 1; }
-		done
-		;;
-esac
 # Every registry row carries the hash of its source: stamp ran at build.
 while IFS="$(printf '\t')" read -r target mode source hash; do
 	[ -n "$target" ] || continue
@@ -68,12 +51,7 @@ SH
 say "hydration: fresh install, user edits preserved, stale copies replaced"
 crun --user developer <<'SH'
 set -eu
-# Same source-name split as the shipped-state half above; synthetic content
-# otherwise.
-case " $FLAVOR " in
-	*" full "* | *" full-sudo "*) agents_source=agents.md ;;
-	*) agents_source=agents-slim.md ;;
-esac
+agents_source=agents.md
 run_install() { HOME="$home" BB_MANAGED_SHARE="$share" bash "$share/hydrate-home.sh" install >/dev/null; }
 share=/tmp/hydrate-share
 home=/tmp/hydrate-home

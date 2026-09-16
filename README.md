@@ -6,10 +6,10 @@ Batteries included container image for running [bb](https://getbb.app), built to
 
 | Tags | What it carries | For |
 | --- | --- | --- |
-| `bb` (also `full`, `latest`, version tags) | Everything in [What's in it](#whats-in-it): Playwright + Chromium, dev tools, DB clients, document tools, backup tooling | The default bb server |
-| `bb-slim` / `bb:img-<v>-slim` | Debian, node, bb, mise, lazy `pnpm` + agent CLIs. No Chromium, dev tools, DB clients, document tools, compilers, or sudo. ~925MB vs ~2,398MB | A small bb runtime you size up yourself |
-| `bb-slim-sudo` / `bb:img-<v>-slim-sudo` | slim plus passwordless sudo | Assembling an environment interactively |
-| `bb-full-sudo` / `bb:img-<v>-full-sudo` | the default image plus passwordless sudo | Long-lived development containers; also the bb-source contributor environment |
+| `ghcr.io/fgrehm/bb` (also `full`, `latest`, the bb-version tags, and `img-<v>` pins) | Everything in [What's in the full image](#whats-in-the-full-image): Playwright + Chromium, dev tools, DB clients, document tools, backup tooling | The default bb server |
+| `ghcr.io/fgrehm/bb:slim` and version pins like `img-<v>-slim`, `0.43.1-slim` | Debian, node, bb, mise, lazy `pnpm` + agent CLIs. No Chromium, dev tools, DB clients, document tools, compilers, or sudo. ~925MB vs ~2,398MB | A small bb runtime you size up yourself |
+| `ghcr.io/fgrehm/bb:slim-sudo` and version pins like `img-<v>-slim-sudo` | slim plus passwordless sudo | Assembling an environment interactively |
+| `ghcr.io/fgrehm/bb:full-sudo` and version pins like `img-<v>-full-sudo` | the default image plus passwordless sudo | Long-lived development containers; also the bb-source contributor environment |
 
 Versioned tags carry a variant suffix (`0.43.1-slim`, `img-0.3.0-full-sudo`); the unsuffixed tags always mean `full`. Internally the container has sudo only: apt packages and mise tools installed at runtime live with the container and vanish when a disposable one stops, so sudo flavors want a named home volume and a non-`--rm` run.
 
@@ -125,6 +125,7 @@ Mounting the host's agent config means the container's CLI version writes state 
 make ci FLAVOR=full-sudo TAG=full-sudo
 podman run -d --name bb-dev \
 	--userns=keep-id \
+	--env MISE_GITHUB_TOKEN="$(gh auth token 2>/dev/null)" \
 	-v ~/src/bb:/home/developer/src:Z \
 	-v bb-dev-home:/home/developer \
 	ghcr.io/fgrehm/bb:img-<version>-full-sudo sleep infinity

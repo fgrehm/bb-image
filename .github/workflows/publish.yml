@@ -41,7 +41,18 @@ jobs:
       # variant someone depends on failed its own verification.
       fail-fast: false
       matrix:
-        flavor: [full, slim, slim-sudo, full-sudo]
+        # The suffix is matrix data, not a metadata-action flavor suffix: an
+        # empty string falls through GitHub's &&/|| ternary idiom, so a global
+        # suffix would garble full as well. Each raw tag carries its own.
+        include:
+          - flavor: full
+            suffix: ""
+          - flavor: slim
+            suffix: -slim
+          - flavor: slim-sudo
+            suffix: -slim-sudo
+          - flavor: full-sudo
+            suffix: -full-sudo
     permissions:
       contents: write
       packages: write
@@ -87,35 +98,30 @@ jobs:
             echo "IMAGE_VERSION=${GITHUB_REF_NAME#v}"
             echo "NODE_VERSION=$(read_arg NODE_VERSION)"
             echo "MISE_VERSION=$(read_arg MISE_VERSION)"
-            # Tag suffix for the metadata step: full keeps the unsuffixed tags
-            # it has always had, every other flavor appends its name. An empty
-            # value must not be substituted away, hence the trailing space.
-            echo "SUFFIX=${{ matrix.flavor == 'full' && '' || format('-{0}', matrix.flavor) }}"
           } >> "$GITHUB_ENV"
 
           echo "bb ${bb}, image ${GITHUB_REF_NAME#v}, flavor ${{ matrix.flavor }}"
 
-      # Tag suffixes follow the variant: full keeps the unsuffixed tags it has
-      # always had (and `latest`), every other flavor appends its name. The bare
-      # `slim` alias mirrors `latest` for people who run the smaller image with
-      # the same unpinned habit; full is the only image behind `latest` itself.
-      # A prerelease moves none of the aliases.
+      # Tags carry the variant suffix from matrix data; see the comment on the
+      # matrix above. Full keeps the unsuffixed tags it has always had
+      # (including `latest`), and the bare `slim` alias mirrors `latest` for
+      # people who run the smaller image with the same unpinned habit; full is
+      # the only image behind `latest` itself. A prerelease moves none of the
+      # aliases.
       - name: Derive tags
         id: meta
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          flavor: |
-            suffix=${{ env.SUFFIX }}
           tags: |
-            type=edge,branch=main
+            type=raw,value=edge${{ matrix.suffix }},enable=${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
             # Image pin: every tag, prereleases included.
-            type=raw,value=img-${{ env.IMAGE_VERSION }},enable=${{ github.ref_type == 'tag' }}
+            type=raw,value=img-${{ env.IMAGE_VERSION }}${{ matrix.suffix }},enable=${{ github.ref_type == 'tag' }}
             # bb aliases, latest, and the bare slim alias: stable tags only. A
             # prerelease must not move the aliases people pin, or an rc would
             # silently become "latest".
-            type=raw,value=${{ env.BB_VERSION }},enable=${{ github.ref_type == 'tag' && !contains(github.ref_name, '-') }}
-            type=raw,value=${{ env.BB_MINOR }},enable=${{ github.ref_type == 'tag' && !contains(github.ref_name, '-') }}
+            type=raw,value=${{ env.BB_VERSION }}${{ matrix.suffix }},enable=${{ github.ref_type == 'tag' && !contains(github.ref_name, '-') }}
+            type=raw,value=${{ env.BB_MINOR }}${{ matrix.suffix }},enable=${{ github.ref_type == 'tag' && !contains(github.ref_name, '-') }}
             type=raw,value=latest,enable=${{ github.ref_type == 'tag' && matrix.flavor == 'full' && !contains(github.ref_name, '-') }}
             type=raw,value=slim,enable=${{ github.ref_type == 'tag' && matrix.flavor == 'slim' && !contains(github.ref_name, '-') }}
 

@@ -5,3 +5,9 @@
 # ours and gets replaced; anything else is assumed to be user-edited and is
 # left alone. Append the old hash in the same commit that changes the source.
 # Empty until the first content change after the mechanism landed.
+#
+# 0.3.0: agents.md is now aimed at every variant, so the baked-tools paragraph
+# is flavor-neutral and the old full-image wording is retired. slim keeps
+# shipping this same registry chain, which is also what lets a home volume move
+# between flavors: one source means one hash history.
+.bb/AGENTS.md	7548daebd153faebec85f75f270d835c273d637be709af55afda433e7ba4eef5

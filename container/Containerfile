@@ -473,11 +473,18 @@ USER root
 RUN install -d -o "$USERNAME" -g "$USERNAME" /usr/local/share/bb
 USER $USERNAME
 
-# Home hydration, with slim's own guidance: in-container AGENTS.md must state
-# only what this image actually carries. The registry and the pristine sources
-# under /usr/local/share/bb work exactly as in full (see that stage).
-COPY --chown=$USERNAME:$USERNAME container/agents-slim.md container/rc-bash.sh \
-    container/rc-zsh.sh container/slim/managed.tsv container/slim/managed-prev.tsv \
+# Home hydration. The same registry chain ships to every variant: the shared
+# guidance keeps the wording flavor-neutral, so a volume that moved from one
+# flavor to another is hydrated by hash as if the image itself moved on. The
+# registry and pristine sources live under /usr/local/share/bb, outside the
+# volume, and the entrypoint hydrates them on every start
+# (container/hydrate-home.sh). Copies a user edited are left alone.
+#
+# This block sits last so that editing a managed source rebuilds only these
+# layers. Above the toolset COPY, an AGENTS.md edit would invalidate the mise
+# toolset layers and re-download the baked dev tools.
+COPY --chown=$USERNAME:$USERNAME container/agents.md container/rc-bash.sh \
+    container/rc-zsh.sh container/managed.tsv container/managed-prev.tsv \
     container/hydrate-home.sh /usr/local/share/bb/
 
 RUN bash /usr/local/share/bb/hydrate-home.sh stamp \

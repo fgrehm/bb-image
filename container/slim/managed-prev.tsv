@@ -1,7 +1,0 @@
-# bb-image managed-prev.tsv (slim)
-#
-# Hashes this image replaces: one `<target><TAB><hash>` line per previously
-# shipped version of a managed source. A home-volume copy whose hash is here is
-# ours and gets replaced; anything else is assumed to be user-edited and is
-# left alone. Append the old hash in the same commit that changes the source.
-# Empty until the first content change after the mechanism landed.
