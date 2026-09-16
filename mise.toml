@@ -39,6 +39,10 @@ git-lfs    = "3.8.0"
 fd         = "10.5.0"
 tmux       = "3.7c"
 shellcheck = "0.11.0"
+# Baked for the same reason as the lint tools: make check runs the repo leak
+# scan with it (tree and full git history), and the scan must not depend on a
+# first-use install being available.
+gitleaks   = "8.30.1"
 
 # First use only. Bootstrap shims are created at build time and install
 # these on first invocation.
