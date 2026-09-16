@@ -106,6 +106,21 @@ RUN mkdir -p /opt/mise \
     && printf '[tools]\nnode = "%s"\n' "${NODE_VERSION}" > /opt/mise/config.toml \
     && chown -R $USERNAME:$USERNAME /opt/mise
 
+# Debian's /etc/profile resets PATH outright, which drops the mise shims, so a login
+# shell (`bash -l`, ssh, or anything bb spawns through one) loses every lazy tool and
+# they all become "command not found". Image-owned, so unlike ~/.bashrc this is not
+# frozen into the home volume and can still be fixed after a volume exists.
+RUN set -e; \
+    printf '%s\n' \
+      '# Debian /etc/profile resets PATH, which drops the mise shims. Put them back.' \
+      'case ":$PATH:" in' \
+      '  *:/opt/mise/shims:*) ;;' \
+      '  *) PATH="/opt/mise/shims:$PATH" ;;' \
+      'esac' \
+      'export PATH' \
+      > /etc/profile.d/mise-shims.sh \
+    && chmod 0644 /etc/profile.d/mise-shims.sh
+
 USER $USERNAME
 
 # bb hosts many projects and resolves them by path, so home is the sane default
@@ -310,11 +325,6 @@ ENV VISUAL=vi
 
 USER root
 
-# Debian's /etc/profile resets PATH outright, which drops the mise shims, so a login
-# shell (`bash -l`, ssh, or anything bb spawns through one) loses every lazy tool and
-# they all become "command not found". Image-owned, so unlike ~/.bashrc this is not
-# frozen into the home volume and can still be fixed after a volume exists.
-#
 # neovim as vi and vim, for the whole container. These must be wrapper scripts and
 # not symlinks. mise's shims are symlinks to the mise binary and it dispatches on
 # the tool name in argv[0], so a shim reached as "vim" is rejected with "vim is not
@@ -323,15 +333,6 @@ USER root
 # if one ever appeared it would break the alias, and the shim scan running under
 # make check catches that before a release ships.
 RUN set -e; \
-    printf '%s\n' \
-      '# Debian /etc/profile resets PATH, which drops the mise shims. Put them back.' \
-      'case ":$PATH:" in' \
-      '  *:/opt/mise/shims:*) ;;' \
-      '  *) PATH="/opt/mise/shims:$PATH" ;;' \
-      'esac' \
-      'export PATH' \
-      > /etc/profile.d/mise-shims.sh \
-    && chmod 0644 /etc/profile.d/mise-shims.sh; \
     for name in vi vim; do \
       printf '%s\n' '#!/bin/sh' \
         '# neovim, aliased for the whole container. Not a symlink, see AGENTS.md.' \
@@ -382,6 +383,99 @@ RUN bash /usr/local/share/bb/hydrate-home.sh stamp \
 # Default to serving bb, with the entrypoint forwarding signals so `podman stop`
 # is a clean shutdown. Override with a command to get a shell instead:
 #   podman run --rm -it bb:dev /bin/bash
+
+CMD ["bash", "/home/developer/entrypoint.sh"]
+
+# ---------------------------------------------------------------------------
+# slim: the small extensible bb runtime. Node, packaged bb, lazy pnpm and the
+# coding-agent CLIs through mise, the entrypoint, and the hydration machinery.
+# Explicitly not here: Chromium and Playwright, the build toolchain, database
+# clients, media and document tools, the baked dev tools, the backup tooling,
+# and sudo. The node and bb layers are built again in this stage rather than
+# shared with full: cache keys follow the parent chain, and full installs its
+# package tier between foundation and node, so the instructions cannot be
+# identical ones. Editing this block rebuilds only slim's layers.
+# ---------------------------------------------------------------------------
+
+FROM foundation AS slim
+
+ARG USERNAME
+ARG BUILD_SCRATCH
+ARG BB_VERSION
+
+# node, installed from the bootstrap config foundation wrote. Same recipe as the
+# full stage; the secret-mount details are documented there.
+RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=0400 \
+    if [ -s /run/secrets/github_token ]; then \
+      export MISE_GITHUB_TOKEN="$(cat /run/secrets/github_token)"; \
+    fi; \
+    export npm_config_cache="$BUILD_SCRATCH/npm" \
+           XDG_CACHE_HOME="$BUILD_SCRATCH/cache" \
+           XDG_STATE_HOME="$BUILD_SCRATCH/state"; \
+    mise install \
+    && mise reshim --force \
+    && rm -rf "$BUILD_SCRATCH"
+
+# bb, with the same npm arguments full uses; native addons are compiled or
+# fetched at install time either way.
+RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=0400 \
+    if [ -s /run/secrets/github_token ]; then \
+      export MISE_GITHUB_TOKEN="$(cat /run/secrets/github_token)"; \
+    fi; \
+    export npm_config_cache="$BUILD_SCRATCH/npm" \
+           XDG_CACHE_HOME="$BUILD_SCRATCH/cache" \
+           XDG_STATE_HOME="$BUILD_SCRATCH/state"; \
+    npm install -g \
+        --allow-scripts=@parcel/watcher,better-sqlite3,node-pty \
+        "bb-app@${BB_VERSION}" \
+    && mise reshim --force \
+    && rm -rf "$BUILD_SCRATCH"
+
+# The slim toolset, overwriting the bootstrap config. Owned by the user so that
+# `mise use -g` keeps working.
+COPY --chown=$USERNAME:$USERNAME container/mise-slim.toml /opt/mise/config.toml
+
+# Reconcile the shim farm for the slim toolset. Nothing is downloaded here, and
+# the rm guard matches the full stage: build residue must not reach $HOME; a
+# cache committed to a layer survives a later delete.
+RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=0400 \
+    set -e; \
+    if [ -s /run/secrets/github_token ]; then \
+      export MISE_GITHUB_TOKEN="$(cat /run/secrets/github_token)"; \
+    fi; \
+    export npm_config_cache="$BUILD_SCRATCH/npm" \
+           XDG_CACHE_HOME="$BUILD_SCRATCH/cache" \
+           XDG_STATE_HOME="$BUILD_SCRATCH/state"; \
+    mise install; \
+    mise reshim --force; \
+    rm -rf "$BUILD_SCRATCH" "/home/${USERNAME}/.cache" "/home/${USERNAME}/.local"
+
+# No browsers in slim, so no fontconfig override; the fontconfig story lives in
+# the full image. LANG still matters here: agents print non-ASCII.
+ENV LANG=C.UTF-8
+
+# ~/.bb holds server state. It is created in the image so the copy-up into a home
+# volume carries the right uid/gid: a volume created empty would be root-owned
+# and bb could not write to it.
+RUN mkdir -p /home/${USERNAME}/.bb
+
+COPY --chown=$USERNAME:$USERNAME container/entrypoint.sh /home/${USERNAME}/entrypoint.sh
+
+# The hydration registry is stamped by developer with an atomic rename, so its
+# directory, not just the files copied into it, must be developer-owned.
+USER root
+RUN install -d -o "$USERNAME" -g "$USERNAME" /usr/local/share/bb
+USER $USERNAME
+
+# Home hydration, with slim's own guidance: in-container AGENTS.md must state
+# only what this image actually carries. The registry and the pristine sources
+# under /usr/local/share/bb work exactly as in full (see that stage).
+COPY --chown=$USERNAME:$USERNAME container/agents-slim.md container/rc-bash.sh \
+    container/rc-zsh.sh container/slim/managed.tsv container/slim/managed-prev.tsv \
+    container/hydrate-home.sh /usr/local/share/bb/
+
+RUN bash /usr/local/share/bb/hydrate-home.sh stamp \
+    && HOME=/home/${USERNAME} bash /usr/local/share/bb/hydrate-home.sh install
 
 CMD ["bash", "/home/developer/entrypoint.sh"]
 

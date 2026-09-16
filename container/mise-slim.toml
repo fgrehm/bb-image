@@ -1,0 +1,49 @@
+# The slim image's toolset, installed as the global mise config at
+# /opt/mise/config.toml. Inherited from the foundation stage; editing this file
+# rebuilds only slim's toolset layer.
+#
+# node and bb run baked; everything else is lazy and installs on first use.
+# The full image's toolset stays in the root mise.toml; this file deliberately
+# carries the smaller slim contract, and the slim checks fail if it grows
+# tools outside it.
+#
+# NOTE: node's version is duplicated as NODE_VERSION at the top of the
+# Containerfile. The bootstrap config that installs node is written before this
+# file is copied over it; the build asserts the two agree and fails on drift.
+
+[settings]
+# Non-interactive by design: the image build and first-use installs must never prompt.
+yes = true
+jobs = 4
+# Shims ("fast" commands) are hard-capped by mise at a single ~3s attempt with
+# no retries, regardless of what is configured here; longer values only benefit
+# explicit commands such as `mise install`. These widen both for slow GitHub
+# minutes, and the cache keeps a good fetch useful for a day.
+fetch_remote_versions_cache = "24h"
+fetch_remote_versions_timeout = "15s"
+
+[tools]
+
+# Installed at image build time. This is all bb itself needs to run.
+node = "24.21.0"
+
+# pnpm is here because agents meet pnpm projects, not because bb uses it. bb detects
+# package managers to report them and installs its plugins with npm, never pnpm. The
+# registry entry declares detect = ["pnpm-lock.yaml", "pnpm-workspace.yaml"], so mise
+# recognises a pnpm project on its own.
+#
+# The version barely matters: current pnpm defaults pmOnFail to `download`, so it fetches
+# and runs whatever version a project declares in packageManager. Note that pnpm 10 and
+# later refuse to run dependency lifecycle scripts unless they are allow-listed, which is
+# why a native dependency can install cleanly and still be broken. `pnpm approve-builds`.
+pnpm = { version = "12.4.1", lazy = true }
+
+# Coding agent CLIs. Deliberately unpinned: `latest` resolves when the shim
+# first runs, so a fresh container pulls the current release rather than a stale
+# bake. bb dispatches to whichever of these you have authenticated.
+claude   = { version = "latest", lazy = true }
+codex    = { version = "latest", lazy = true }
+pi       = { version = "latest", lazy = true }
+opencode = { version = "latest", lazy = true }
+grok     = { version = "latest", lazy = true }
+oh-my-pi = { version = "latest", lazy = true }

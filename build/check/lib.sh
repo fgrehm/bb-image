@@ -22,7 +22,8 @@ say() {
 # quoting, and any odd class must be passed as --env NAME=value here.
 crun() {
 	# shellcheck disable=SC2086
-	"$ENGINE" run --rm --interactive $TOKEN_ARGS --env MISE_OFFLINE=1 --env MISE_QUIET=1 "$@" "$img" /bin/bash -s
+	"$ENGINE" run --rm --interactive $TOKEN_ARGS --env MISE_OFFLINE=1 --env MISE_QUIET=1 \
+		--env FLAVOR="${FLAVOR:-full}" "$@" "$img" /bin/bash -s
 }
 
 if [ -n "${GH_TOKEN:-}" ]; then

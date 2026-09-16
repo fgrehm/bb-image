@@ -15,7 +15,11 @@ say "AGENTS.md shipped with the mise guidance; registry stamped; home hydrated a
 crun --user developer <<'SH'
 set -eu
 share=/usr/local/share/bb
-for f in agents.md managed.tsv managed-prev.tsv hydrate-home.sh rc-bash.sh rc-zsh.sh; do
+case " $FLAVOR " in
+	*" full "* | *" full-sudo "*) agents_source=agents.md ;;
+	*) agents_source=agents-slim.md ;;
+esac
+for f in "$agents_source" managed.tsv managed-prev.tsv hydrate-home.sh rc-bash.sh rc-zsh.sh; do
 	test -f "$share/$f"
 done
 for phrase in \
@@ -23,12 +27,27 @@ for phrase in \
 	'mise use <tool>@<version>' \
 	'mise trust' \
 	'/opt/mise' \
-	'mise reshim' \
-	'/opt/ms-playwright' \
-	'FONTCONFIG_FILE'; do
-	grep -qF "$phrase" "$share/agents.md" ||
+	'mise reshim'; do
+	grep -qF "$phrase" "$share/$agents_source" ||
 		{ echo "AGENTS.md is missing expected content: $phrase" >&2; exit 1; }
 done
+# Guidance may promise only what the image carries: the full flavors bake
+# Playwright's Chromium and the fontconfig override, and every other flavor
+# must not mention either.
+case " $FLAVOR " in
+	*" full "* | *" full-sudo "*)
+		for phrase in '/opt/ms-playwright' 'FONTCONFIG_FILE'; do
+			grep -qF "$phrase" "$share/$agents_source" ||
+				{ echo "AGENTS.md is missing expected content: $phrase" >&2; exit 1; }
+		done
+		;;
+	*)
+		for phrase in '/opt/ms-playwright' 'FONTCONFIG_FILE' 'Playwright'; do
+			grep -qF "$phrase" "$share/$agents_source" &&
+				{ echo "AGENTS.md promises full-image content: $phrase" >&2; exit 1; }
+		done
+		;;
+esac
 # Every registry row carries the hash of its source: stamp ran at build.
 while IFS="$(printf '\t')" read -r target mode source hash; do
 	[ -n "$target" ] || continue
@@ -49,6 +68,12 @@ SH
 say "hydration: fresh install, user edits preserved, stale copies replaced"
 crun --user developer <<'SH'
 set -eu
+# Same source-name split as the shipped-state half above; synthetic content
+# otherwise.
+case " $FLAVOR " in
+	*" full "* | *" full-sudo "*) agents_source=agents.md ;;
+	*) agents_source=agents-slim.md ;;
+esac
 run_install() { HOME="$home" BB_MANAGED_SHARE="$share" bash "$share/hydrate-home.sh" install >/dev/null; }
 share=/tmp/hydrate-share
 home=/tmp/hydrate-home
@@ -57,9 +82,9 @@ mkdir -p "$share" "$home/.bb"
 cp /usr/local/share/bb/managed.tsv /usr/local/share/bb/hydrate-home.sh "$share/"
 
 # Synthetic sources, so the test stays independent of the shipped content.
-printf 'agents v1\n' >"$share/agents.md"
+printf 'agents v1\n' >"$share/$agents_source"
 printf '# snippet v1\n' >"$share/rc-bash.sh"
-printf '.bb/AGENTS.md\tfile\tagents.md\n.bashrc\tblock\trc-bash.sh\n' >"$share/managed.tsv"
+printf '.bb/AGENTS.md\tfile\t%s\n.bashrc\tblock\trc-bash.sh\n' "$agents_source" >"$share/managed.tsv"
 : >"$share/managed-prev.tsv"
 BB_MANAGED_SHARE="$share" bash "$share/hydrate-home.sh" stamp
 
@@ -84,9 +109,9 @@ grep -q 'eval extra' "$home/.bashrc" ||
 # 3. An unmodified stale copy is replaced once the image moves on, the way a
 #    bump replaces our own shipped version. Recording the old hash in
 #    managed-prev.tsv is what the maintainer does in the changing commit.
-cp "$share/agents.md" /tmp/v1-agents
+cp "$share/$agents_source" /tmp/v1-agents
 cp "$share/rc-bash.sh" /tmp/v1-rc
-printf 'agents v2\n' >"$share/agents.md"
+printf 'agents v2\n' >"$share/$agents_source"
 printf '# snippet v2\n' >"$share/rc-bash.sh"
 printf '.bb/AGENTS.md\t%s\n.bashrc\t%s\n' \
 	"$(sha256sum /tmp/v1-agents | cut -d' ' -f1)" \

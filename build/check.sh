@@ -25,6 +25,7 @@ export root
 known_flavors='full slim slim-sudo full-sudo'
 
 flavor="${FLAVOR:-full}"
+export FLAVOR="$flavor"
 case " $known_flavors " in
 *" $flavor "*) ;;
 *)
