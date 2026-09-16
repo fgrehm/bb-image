@@ -72,6 +72,8 @@ The Containerfile is one multi-stage recipe for the family: internal `foundation
 
 Tag policy follows the variant: full keeps every unsuffixed tag (`latest`, `edge`, bb-version tags, `img-<version>`); other flavors get suffixed pins (`0.43.1-slim`, `img-<version>-full-sudo`, `edge-slim`) plus a bare moving `slim` alias that mirrors `latest` for the slim image specifically. Sudo flavors drop `--security-opt no-new-privileges` (make derives the flag from the FLAVOR); there is no middle ground where sudo is installed but unusable. There is no `bb:source` variant: full-sudo proved bb-from-source (install, native compile, dev boot) with no missing OS packages, so a dedicated image would only duplicate prerequisites. The worker stays a long-lived `full-sudo` launch profile rather than a distinct image until it needs its own entrypoint, health check, or baked enrollment contract.
 
+Contracts that derived images rely on, and are upstream invariants not to break casually: the `sh.bb.flavor` label is identity and survives derivation; the baked entrypoint is optional for a derived image that replaces the entrypoint (hydration and log mirroring skip; build-time hydration covers freshly seeded home volumes; the only content hydration updates at all is `managed.tsv`'s targets); and the hydration registry carries no username-dependent paths (`usermod` rename machinery in downstream images keeps working across digests). All three came out of pAIr00t's live repin onto a new base digest; they are documented in README "Using this image as a base".
+
 Careful with a sudo image at the operator level: sudo is confined to the rootless container, and a sudo image with a host ssh mount or the podman socket mounted in is a different threat model entirely.
 
 ## Releasing
