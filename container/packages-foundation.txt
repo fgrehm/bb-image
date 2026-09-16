@@ -1,0 +1,41 @@
+# Packages every image in the family carries. One per line; # starts a comment.
+# Installed by the foundation stage before mise, so the variants that branch off
+# it (slim, source, full) do not re-resolve this set.
+#
+# The agent-host tier, what an agent host feels immediately: procps is `ps`, less
+# is git's pager, file is libmagic which agents reach for constantly, and gnupg
+# is commit signing.
+#
+# The transport tier, everything the build and the first-use installs lean on:
+# ca-certificates for any TLS, curl for the mise installer, wget and unzip for
+# installers, rsync and zstd for the backup script's trace mirrors and archives.
+#
+# openssh-client is ssh; git and gnupg come with it above.
+#
+# python3 is the arm64 blocker the README names for node-gyp native builds, and
+# the one package here mise has no backend for. At runtime the mise shim sits
+# ahead of /usr/bin on PATH, so bare python3 is mise's and this copy is reached
+# by absolute path only.
+#
+# bubblewrap is what agents sandbox themselves with: Claude Code's bash sandbox
+# shells out to `bwrap` (and can be pointed at it with CLAUDE_CODE_BUBBLEWRAP /
+# bwrapPath), and bb's own reference sandbox image installs it first, ahead of
+# git, curl and the agents. It needs unprivileged user namespaces, which podman's
+# default seccomp permits under --userns=keep-id. See the notes in AGENTS.md
+# before changing the run flags.
+
+ca-certificates
+bubblewrap
+curl
+file
+git
+gnupg
+less
+openssh-client
+procps
+python3
+rsync
+unzip
+wget
+zsh
+zstd

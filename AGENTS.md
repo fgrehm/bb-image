@@ -5,7 +5,8 @@ Container image for running [bb](https://getbb.app). `README.md` describes it fo
 ## Layout
 
 - `container/` — the image and what it contains:
-  - `container/Containerfile` — the recipe. Debian 13 pinned by digest, apt utilities, mise, then node, bb, Playwright with Chromium, and the baked dev tools at build time, with the locale, editor alias, and login-shell PATH fix at the bottom. No verification RUNs anywhere: the Containerfile only builds.
+  - `container/Containerfile` — the recipe, one multi-stage file for the family: a pinned Debian 13, an internal `foundation` stage (distro, the unprivileged user, mise with its data outside home, and the packages in `container/packages-foundation.txt`), then named variant stages branching off it (`full` today; slim and friends as they land), with a final empty `release` stage so a bare build and an explicit target cannot diverge. No verification RUNs anywhere: the Containerfile only builds.
+  - `container/packages-*.txt` — the per-stage package inventories, one package per line with the rationale comments. Version ARGs live once before the first `FROM`; stages redeclare bare. The Makefile and check fragments read those ARGs with sed, so a value pin must stay on a single line each.
   - `container/entrypoint.sh` — PID 1 for the default command. Runs bb behind a log tail and forwards signals.
   - `container/fonts.conf` — the fontconfig override the image points `FONTCONFIG_FILE` at. Debian's file with the system cache directories removed, so the `chmod("/var/cache/fontconfig")` fontconfig attempts on every browser launch never happens. `container/fontconfig.sh` compares it against the distro file under `make check`.
   - `container/fontconfig.sh` — the drift guard and the regeneration for `fonts.conf`, kept next to the file they guard. `check` mode diffs the shipped file against the distro's (comments stripped) and asserts the single xdg cachedir and the absolute conf.d include; `regen` mode rewrites it.

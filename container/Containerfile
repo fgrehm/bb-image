@@ -1,81 +1,55 @@
 # Pinned to the multi-arch OCI index digest for reproducible builds.
 # Bump with: podman images --digests | grep debian
-FROM docker.io/library/debian@sha256:d7e12182ce18b85b93007c1dedf31f2d29e01ccf3182cc4017c709b6259bc132
-
+#
+# Build arguments live once here, before the first FROM, so the version pins
+# have a single home that the Makefile and check fragments can read with sed.
+# Each stage redeclares the ones it uses, bare, which is also how a
+# --build-arg invoked on the whole build reaches every stage.
+#
 # Scoped to the build rather than ENV, so it does not leak into the final image.
 ARG DEBIAN_FRONTEND=noninteractive
-
-# Only what mise has no backend for, plus python3, which matters here and basically
-# nowhere else. During the bb install below, the global config still declares node
-# alone, so no lazy shims exist yet and python3 is otherwise absent from the build.
-# That is the blocker the README names for arm64 node-gyp builds. At runtime the
-# mise shim sits ahead of /usr/bin on PATH, so bare python3 is mise's and this copy
-# is reached by absolute path only.
-#
-# The rest are the gaps an agent host feels immediately: procps is `ps`, less is
-# git's pager, unzip is assumed by installers, pkg-config is needed by native builds
-# that build-essential does not cover, and gnupg is commit signing.
-#
-# bubblewrap is what agents sandbox themselves with: Claude Code's bash sandbox shells out
-# to `bwrap` (and can be pointed at it with CLAUDE_CODE_BUBBLEWRAP / bwrapPath), and bb's
-# own reference sandbox image installs it first, ahead of git, curl and the agents. It
-# needs unprivileged user namespaces, which podman's default seccomp permits under
-# --userns=keep-id. See the notes in AGENTS.md before changing the run flags.
-#
-# imagemagick is for image work that comes up constantly around screenshots and generated
-# assets, and it is what the MiniMagick Ruby gem shells out to. --no-install-recommends
-# keeps it near 23MB by skipping the delegate zoo. The cost of that is real and worth
-# knowing: without the recommends there is no ghostscript, so PDF and PostScript cannot be
-# read, and Debian's policy.xml restricts some formats regardless.
-#
-# The document and asset tier, about 21MB together. poppler-utils is the answer to the gap
-# imagemagick leaves: pdftotext and pdftoppm read PDFs for 6MB where ghostscript costs 52MB
-# and brings a large parser along with it. file is libmagic, which agents reach for
-# constantly and which was missing entirely. qpdf handles PDF structure, webp gives cwebp
-# and dwebp, and pngquant, optipng and jpegoptim cover asset optimisation for under a
-# megabyte each.
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-                       build-essential \
-                       bubblewrap \
-                       ca-certificates \
-                       curl \
-                       file \
-                       git \
-                       gnupg \
-                       imagemagick \
-                       jpegoptim \
-                       less \
-                       libpq-dev \
-                       libsqlite3-dev \
-                       libssl-dev \
-                       openssh-client \
-                       optipng \
-                       pkg-config \
-                       pngquant \
-                       poppler-utils \
-                       postgresql-client \
-                       procps \
-                       python3 \
-                       qpdf \
-                       rsync \
-                       sqlite3 \
-                       unzip \
-                       webp \
-                       wget \
-                       zlib1g-dev \
-                       zsh \
-                       zstd \
-    && rm -rf /var/lib/apt/lists/*
-
 ARG USERNAME=developer
 ARG USER_UID=1000
 ARG USER_GID=1000
+ARG MISE_VERSION=2026.9.5
+ARG NODE_VERSION=24.21.0
+ARG BB_VERSION=0.43.1
+ARG PLAYWRIGHT_VERSION=1.63.0
+#
+# A scratch dir every downloading RUN points its caches at and deletes before it
+# ends, ARG rather than ENV so none of it lands in the runtime environment; the
+# details are documented at first use in the full stage.
+ARG BUILD_SCRATCH=/tmp/build-scratch
+
+# ---------------------------------------------------------------------------
+# foundation: everything every variant in this family starts from. The distro
+# pinned above, the unprivileged user, mise with its data outside home, and the
+# packages every image carries (see container/packages-foundation.txt). It has
+# no packaged bb, no server command and no variant-specific toolset; it is
+# internal and never published. The variants branch off it below.
+# ---------------------------------------------------------------------------
+
+FROM docker.io/library/debian@sha256:d7e12182ce18b85b93007c1dedf31f2d29e01ccf3182cc4017c709b6259bc132 AS foundation
+
+ARG DEBIAN_FRONTEND
+ARG USERNAME
+ARG USER_UID
+ARG USER_GID
+ARG MISE_VERSION
+ARG NODE_VERSION
+
+# The package list is a file so the inventory is diffable and reviewable on its
+# own; the file carries the rationale comments. It is copied into /tmp and
+# deleted in the same RUN, so nothing survives into a layer.
+COPY container/packages-foundation.txt /tmp/packages-foundation.txt
+RUN apt-get update \
+    && grep -vE '^(\s*(#.*)?)$' /tmp/packages-foundation.txt \
+       | xargs apt-get install -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/* /tmp/packages-foundation.txt
 
 RUN groupadd --gid $USER_GID $USERNAME \
     && useradd --uid $USER_UID --gid $USER_GID -m -s /bin/bash $USERNAME
 
-# ---------------------------------------------------------------------------
 # mise, its toolchains, and the toolset all live outside the user's home.
 #
 # Home is volume-backed at runtime, and a named volume is seeded from the image
@@ -83,11 +57,9 @@ RUN groupadd --gid $USER_GID $USERNAME \
 # first boot and shadow later image updates. Keeping the toolchain out of home
 # means the baked tools stay in step with the image instead of drifting inside
 # a volume, and it keeps the first-boot copy into that volume small.
-# ---------------------------------------------------------------------------
 
 # The installer verifies the release checksum. Pinning MISE_VERSION keeps the
 # build reproducible and selects the checksum from that release's SHASUMS256.txt.
-ARG MISE_VERSION=2026.9.5
 RUN curl -fsSL https://mise.run \
     | MISE_INSTALL_PATH=/usr/local/bin/mise MISE_VERSION="v${MISE_VERSION}" sh
 
@@ -121,16 +93,15 @@ ENV PATH="/opt/mise/shims:$PATH"
 # RUN that downloads points these at $BUILD_SCRATCH and removes it before the RUN
 # ends, and the bytes never reach a layer. ARG rather than ENV so none of it lands in
 # the runtime environment.
-ARG BUILD_SCRATCH=/tmp/build-scratch
 
-# node is the runtime the image is built around, so it is installed from an
-# explicit version rather than read out of mise.toml. That means the version is
-# named twice, here and in mise.toml, because a layer cannot both install node
-# and depend on the file that declares it. check.sh (make check) fails a release
-# if the two drift apart. This is a bootstrap config holding only node; the real
-# toolset is copied in further down, after the expensive layers, so editing it
-# does not invalidate them.
-ARG NODE_VERSION=24.21.0
+# A bootstrap config holding only node. The real toolset is copied in further
+# down in the full stage, after the expensive layers, so editing it does not
+# invalidate them; the variants that branch off foundation replace this file in
+# their own way. node is installed from an explicit version rather than read
+# out of a toolset file, so the version is named twice, once at the top and
+# once in mise.toml, because a layer cannot both install node and depend on the
+# file that declares it. check.sh (make check) fails a release if the two drift
+# apart.
 RUN mkdir -p /opt/mise \
     && printf '[tools]\nnode = "%s"\n' "${NODE_VERSION}" > /opt/mise/config.toml \
     && chown -R $USERNAME:$USERNAME /opt/mise
@@ -140,6 +111,32 @@ USER $USERNAME
 # bb hosts many projects and resolves them by path, so home is the sane default
 # rather than a single mount point. Mount a tree under it (see the Makefile).
 WORKDIR /home/${USERNAME}
+
+# ---------------------------------------------------------------------------
+# full: the batteries-included image, the same artifact the unsuffixed tags
+# have always meant. Node, packaged bb, Playwright's Chromium, the build
+# toolchain, dev tools, backup tooling, and document/image support on top of
+# what foundation carries (container/packages-full.txt).
+# ---------------------------------------------------------------------------
+
+FROM foundation AS full
+
+ARG DEBIAN_FRONTEND
+ARG USERNAME
+ARG BUILD_SCRATCH
+ARG BB_VERSION
+ARG PLAYWRIGHT_VERSION
+
+# foundation left off as the unprivileged user; the package tier full adds is
+# root's to install, and the stage steps back down before any of the layers
+# below run as developer.
+USER root
+COPY container/packages-full.txt /tmp/packages-full.txt
+RUN apt-get update \
+    && grep -vE '^(\s*(#.*)?)$' /tmp/packages-full.txt \
+       | xargs apt-get install -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/* /tmp/packages-full.txt
+USER $USERNAME
 
 # GitHub token, optional. mise resolves versions and verifies artifact attestations
 # through api.github.com, which serves 60 requests per hour unauthenticated against 1000
@@ -162,11 +159,8 @@ WORKDIR /home/${USERNAME}
 # The token does not reach the image: the token leak scan in build/check.sh runs
 # against the built image at verification time, before a release is pushed.
 
-# node is the runtime the image is built around, so it is installed from an
-# explicit version rather than read out of mise.toml. That means the version is
-# named twice, here and in mise.toml, because a layer cannot both install node
-# and depend on the file that declares it. build/check.sh, which make check
-# runs before a release is pushed, fails the check if the two drift apart.
+# node is the runtime the image is built around. The version was declared at the
+# top and baked into the bootstrap config by foundation; this RUN installs it.
 RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=0400 \
     if [ -s /run/secrets/github_token ]; then \
       export MISE_GITHUB_TOKEN="$(cat /run/secrets/github_token)"; \
@@ -182,7 +176,6 @@ RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=04
 # above means reinstalling it. npm gates native-addon install scripts, so the
 # three bb depends on have to be allowed explicitly or bb will not work:
 # @parcel/watcher, better-sqlite3, and node-pty are compiled or fetched here.
-ARG BB_VERSION=0.43.1
 RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=0400 \
     if [ -s /run/secrets/github_token ]; then \
       export MISE_GITHUB_TOKEN="$(cat /run/secrets/github_token)"; \
@@ -204,7 +197,6 @@ RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=04
 # a layer toolset edits do not invalidate, and because `install --with-deps` needs
 # root, which the toolset layers deliberately are not.
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
-ARG PLAYWRIGHT_VERSION=1.63.0
 RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=0400 \
     if [ -s /run/secrets/github_token ]; then \
       export MISE_GITHUB_TOKEN="$(cat /run/secrets/github_token)"; \
@@ -392,3 +384,13 @@ RUN bash /usr/local/share/bb/hydrate-home.sh stamp \
 #   podman run --rm -it bb:dev /bin/bash
 
 CMD ["bash", "/home/developer/entrypoint.sh"]
+
+# ---------------------------------------------------------------------------
+# Final alias. Bare builds (no --target) and TARGET=release produce the same
+# artifact: the default full image behind today's unsuffixed tags. A stage with
+# no instructions adds nothing; it exists so that naming a target explicitly
+# and not naming one cannot diverge. New variants are appended as stages above
+# this one; nothing follows it, or bare builds would silently change target.
+# ---------------------------------------------------------------------------
+
+FROM full AS release

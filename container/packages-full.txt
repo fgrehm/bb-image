@@ -1,0 +1,38 @@
+# Packages only the full batteries-included image carries. One per line; #
+# starts a comment. Installed by the full stage, before the node, bb and
+# Playwright layers, so the build tooling they occasionally need is present.
+# slim, slim-sudo and source do not inherit this file.
+
+# The native-build tier: compiler, headers and metadata for anything that
+# compiles at install or runtime.
+build-essential
+pkg-config
+libssl-dev
+zlib1g-dev
+
+# The database tier: what talks to a running postgres or reads a sqlite file
+# directly.
+libpq-dev
+postgresql-client
+libsqlite3-dev
+sqlite3
+
+# The document and image tier, about 21MB together with --no-install-recommends.
+# imagemagick is for image work that comes up constantly around screenshots and
+# generated assets, and it is what the MiniMagick Ruby gem shells out to. The
+# cost of dropping recommends is real and worth knowing: without them there is
+# no ghostscript, so PDF and PostScript cannot be read, and Debian's policy.xml
+# restricts some formats regardless.
+#
+# poppler-utils is the answer to the gap imagemagick leaves: pdftotext and
+# pdftoppm read PDFs for 6MB where ghostscript costs 52MB and brings a large
+# parser along with it. qpdf handles PDF structure, webp gives cwebp and dwebp,
+# and pngquant, optipng and jpegoptim cover asset optimisation for under a
+# megabyte each.
+imagemagick
+jpegoptim
+optipng
+pngquant
+poppler-utils
+qpdf
+webp
