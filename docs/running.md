@@ -12,6 +12,8 @@ bb's default port is 38886. If something else on your machine already owns it, p
 
 ## The same thing without make
 
+This uses the local `bb:dev` tag produced by `make build`. To use a published image instead, replace it with `ghcr.io/fgrehm/bb:latest`.
+
 ```bash
 podman run -d --name bb \
   --userns=keep-id \
