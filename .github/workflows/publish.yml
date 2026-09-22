@@ -262,8 +262,8 @@ jobs:
               if $stable; then
                 echo "${BB_VERSION}${suffix}"
                 echo "${BB_VERSION%.*}${suffix}"
-                [ "$flavor" = full ] && echo "latest"
-                [ "$flavor" = slim ] && echo "slim"
+                if [ "$flavor" = full ]; then echo "latest"; fi
+                if [ "$flavor" = slim ]; then echo "slim"; fi
               fi
             done
           } | sort -u | grep -v '^$' > /tmp/names.txt
