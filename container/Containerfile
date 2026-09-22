@@ -13,7 +13,7 @@ ARG USER_UID=1000
 ARG USER_GID=1000
 ARG MISE_VERSION=2026.9.5
 ARG NODE_VERSION=24.21.0
-ARG BB_VERSION=0.43.3
+ARG BB_VERSION=0.43.4
 ARG PLAYWRIGHT_VERSION=1.63.0
 #
 # A scratch dir every downloading RUN points its caches at and deletes before it

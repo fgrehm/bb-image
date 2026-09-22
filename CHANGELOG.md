@@ -1,10 +1,18 @@
 # Changelog
 
-Two versions move independently. **bb** owns the bare semver tags (`0.43.3`, `0.43`) and is baked into the image from `BB_VERSION` in the `Containerfile`. **The image** owns the `v*` git tags, published as `img-<tag>` alongside `latest`. An entry here belongs to the image version and names the bb version it carries.
+Two versions move independently. **bb** owns the bare semver tags (`0.43.4`, `0.43`) and is baked into the image from `BB_VERSION` in the `Containerfile`. **The image** owns the `v*` git tags, published as `img-<tag>` alongside `latest`. An entry here belongs to the image version and names the bb version it carries.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the image follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) with the bump meanings recorded in `AGENTS.md`: major for how the image is run, minor for new tools or a version bump, patch for a bb bump or a fix that moves nothing else.
 
 ## [Unreleased]
+
+## [0.3.2] - 2026-09-22
+
+Carries bb 0.43.4.
+
+### Changed
+
+- Bumps the baked bb release from 0.43.3 to 0.43.4. The release adds the built-in Thread List plugin and its preference commands, queued-message retry state, and sidebar preference defaults.
 
 ## [0.3.1] - 2026-09-22
 
