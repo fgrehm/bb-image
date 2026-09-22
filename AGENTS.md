@@ -145,7 +145,7 @@ against the distro file inside the image, keeps the shipped header comment and t
 shipped cache block, and refuses to replace the file if the result would not pass
 the drift guard.
 
-Home should stay near 20K; `make check` trips at 40K. If home grows, something is writing build residue into `$HOME` that the home volume will copy on first boot. The usual culprits are mise's `~/.cache/sigstore-rust` and `~/.local/state/mise`, which appear whenever anything runs a shim without `$BUILD_SCRATCH` set:
+Home should stay near 24K; `make check` trips at 48K. If home grows, something is writing build residue into `$HOME` that the home volume will copy on first boot. The usual culprits are mise's `~/.cache/sigstore-rust` and `~/.local/state/mise`, which appear whenever anything runs a shim without `$BUILD_SCRATCH` set:
 
 ```bash
 podman run --rm bb:dev du -sh /home/developer

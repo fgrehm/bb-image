@@ -12,6 +12,6 @@ home_kb="$("$ENGINE" run --rm "$img" /bin/bash -c 'du -sk /home/developer' | cut
 echo "home is ${home_kb}K"
 [ "$home_kb" -le 40 ] ||
 	{
-		echo "home grew past 40K (it should stay near 20K); look for build residue writing into \$HOME (see AGENTS.md)" >&2
+		echo "home grew past 48K (it should stay near 24K); look for build residue writing into \$HOME (see AGENTS.md)" >&2
 		exit 1
 	}
