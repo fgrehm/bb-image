@@ -10,7 +10,7 @@
 say "home stays small; build residue here gets frozen into the volume on first boot"
 home_kb="$("$ENGINE" run --rm "$img" /bin/bash -c 'du -sk /home/developer' | cut -f1)"
 echo "home is ${home_kb}K"
-[ "$home_kb" -le 40 ] ||
+[ "$home_kb" -le 48 ] ||
 	{
 		echo "home grew past 48K (it should stay near 24K); look for build residue writing into \$HOME (see AGENTS.md)" >&2
 		exit 1
