@@ -35,7 +35,7 @@ env:
 
 jobs:
   publish:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       # A variant that fails blocks the release: do not publish full while a
       # variant someone depends on failed its own verification.
@@ -221,7 +221,7 @@ jobs:
   release:
     if: github.ref_type == 'tag'
     needs: [publish]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
