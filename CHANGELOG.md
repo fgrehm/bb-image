@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-09-22
+
+Carries bb 0.43.3.
+
 ### Fixed
 
 - Slim now inherits the same cache and tool data environment defaults as full, and both variants recreate user-owned `~/.cache` and `~/.local` after build-time cleanup so lazy mise installs remain writable when derived images mount subdirectories there.
