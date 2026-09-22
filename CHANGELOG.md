@@ -1,10 +1,15 @@
 # Changelog
 
-Two versions move independently. **bb** owns the bare semver tags (`0.43.1`, `0.43`) and is baked into the image from `BB_VERSION` in the `Containerfile`. **The image** owns the `v*` git tags, published as `img-<tag>` alongside `latest`. An entry here belongs to the image version and names the bb version it carries.
+Two versions move independently. **bb** owns the bare semver tags (`0.43.3`, `0.43`) and is baked into the image from `BB_VERSION` in the `Containerfile`. **The image** owns the `v*` git tags, published as `img-<tag>` alongside `latest`. An entry here belongs to the image version and names the bb version it carries.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the image follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) with the bump meanings recorded in `AGENTS.md`: major for how the image is run, minor for new tools or a version bump, patch for a bb bump or a fix that moves nothing else.
 
 ## [Unreleased]
+
+### Fixed
+
+- Slim now inherits the same cache and tool data environment defaults as full, and both variants recreate user-owned `~/.cache` and `~/.local` after build-time cleanup so lazy mise installs remain writable when derived images mount subdirectories there.
+- Documented mise global-config replacement semantics, the Node pin coupling with the baked bb installation, and the GitHub secret recipe for derived images that add aqua-backed tools.
 
 ## [0.3.0] - 2026-09-22
 

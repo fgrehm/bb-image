@@ -22,6 +22,19 @@ jobs = 4
 fetch_remote_versions_cache = "24h"
 fetch_remote_versions_timeout = "15s"
 
+[env]
+# Keep slim's lazy tools on the same predictable paths as full. These are
+# `${HOME}`-relative so derived images that rename the user remain correct.
+TMPDIR = "/tmp"
+npm_config_cache = "{{ env.HOME }}/.cache/npm"
+pnpm_config_store_dir = "{{ env.HOME }}/.cache/pnpm-store"
+npm_config_store_dir = "{{ env.HOME }}/.cache/pnpm-store"
+CARGO_HOME = "{{ env.HOME }}/.cargo"
+GOPATH = "{{ env.HOME }}/go"
+GOMODCACHE = "{{ env.HOME }}/go/pkg/mod"
+GOCACHE = "{{ env.HOME }}/.cache/go-build"
+UV_CACHE_DIR = "{{ env.HOME }}/.cache/uv"
+
 [tools]
 
 # Installed at image build time. This is all bb itself needs to run.

@@ -80,6 +80,21 @@ ENV MISE_DATA_DIR=/opt/mise
 ENV MISE_GLOBAL_CONFIG_FILE=/opt/mise/config.toml
 ENV PATH="/opt/mise/shims:$PATH"
 
+# Shared runtime cache paths, available to every variant and every exec context.
+# The default-home ENVs are complemented by `${HOME}`-relative [env] entries in
+# each variant's mise config so mise-managed commands remain correct when a
+# derived image renames the user. Such images should redeclare these ENVs too if
+# raw execs need renamed-home paths.
+ENV TMPDIR=/tmp
+ENV npm_config_cache=/home/developer/.cache/npm
+ENV pnpm_config_store_dir=/home/developer/.cache/pnpm-store
+ENV npm_config_store_dir=/home/developer/.cache/pnpm-store
+ENV CARGO_HOME=/home/developer/.cargo
+ENV GOPATH=/home/developer/go
+ENV GOMODCACHE=/home/developer/go/pkg/mod
+ENV GOCACHE=/home/developer/.cache/go-build
+ENV UV_CACHE_DIR=/home/developer/.cache/uv
+
 # No cache location is pinned here, on purpose. A cache is the one thing a volume is
 # the right home for, so with nothing set, runtime npm writes to ~/.npm and mise to
 # ~/.cache/mise, both inside the home volume, where they survive a recreate. Pinning
@@ -270,7 +285,9 @@ RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=04
            XDG_STATE_HOME="$BUILD_SCRATCH/state"; \
     mise install; \
     mise reshim --force; \
-    rm -rf "$BUILD_SCRATCH" "/home/${USERNAME}/.cache" "/home/${USERNAME}/.local"
+    rm -rf "$BUILD_SCRATCH" "/home/${USERNAME}/.cache" "/home/${USERNAME}/.local" \
+    && install -d -o "$USERNAME" -g "$USERNAME" \
+        "/home/${USERNAME}/.cache" "/home/${USERNAME}/.local"
 
 # ---------------------------------------------------------------------------
 # Locale, editor, the fontconfig override, login-shell PATH, and the neovim alias.
@@ -322,26 +339,6 @@ ENV LANG=C.UTF-8
 # git reaches for $EDITOR for `git commit` without -m and for `git rebase -i`.
 ENV EDITOR=vi
 ENV VISUAL=vi
-
-# Package-manager and toolchain cache paths, declared rather than implied, so
-# sandbox policies can name every path as configuration instead of chasing a
-# tool's per-process probing (the pnpm ancestor-probe noise was the original
-# complaint). These ENVs are the always-on layer: they hold for every exec and
-# every shell with the default home baked. The global mise config declares the
-# same keys as `${HOME}`-relative [env] entries that mise resolves at runtime,
-# which is what keeps a derived image that renames the user via `usermod -d'
-# correct inside mise-managed shells and shim invocations; a renamed consumer
-# that wants the paths outside mise contexts redeclares these ENVs in its own
-# recipe (pAIr00t's compose already does exactly that).
-ENV TMPDIR=/tmp
-ENV npm_config_cache=/home/developer/.cache/npm
-ENV pnpm_config_store_dir=/home/developer/.cache/pnpm-store
-ENV npm_config_store_dir=/home/developer/.cache/pnpm-store
-ENV CARGO_HOME=/home/developer/.cargo
-ENV GOPATH=/home/developer/go
-ENV GOMODCACHE=/home/developer/go/pkg/mod
-ENV GOCACHE=/home/developer/.cache/go-build
-ENV UV_CACHE_DIR=/home/developer/.cache/uv
 
 USER root
 
@@ -474,7 +471,9 @@ RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=04
            XDG_STATE_HOME="$BUILD_SCRATCH/state"; \
     mise install; \
     mise reshim --force; \
-    rm -rf "$BUILD_SCRATCH" "/home/${USERNAME}/.cache" "/home/${USERNAME}/.local"
+    rm -rf "$BUILD_SCRATCH" "/home/${USERNAME}/.cache" "/home/${USERNAME}/.local" \
+    && install -d -o "$USERNAME" -g "$USERNAME" \
+        "/home/${USERNAME}/.cache" "/home/${USERNAME}/.local"
 
 # No browsers in slim, so no fontconfig override; the fontconfig story lives in
 # the full image. LANG still matters here: agents print non-ASCII.
