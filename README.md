@@ -7,13 +7,13 @@ Batteries included container image for running [bb](https://getbb.app), built to
 | Tags | What it carries | For |
 | --- | --- | --- |
 | `ghcr.io/fgrehm/bb` (also `full`, `latest`, the bb-version tags, and `img-<v>` pins) | Everything in [What's in the full image](#whats-in-the-full-image): Playwright + Chromium, dev tools, DB clients, document tools, backup tooling | The default bb server |
-| `ghcr.io/fgrehm/bb:slim` and version pins like `img-<v>-slim`, `0.43.1-slim` | Debian, node, bb, mise, lazy `pnpm` + agent CLIs. No Chromium, dev tools, DB clients, document tools, compilers, or sudo. ~925MB vs ~2,398MB | A small bb runtime you size up yourself |
-| `ghcr.io/fgrehm/bb:0.43.1-slim-sudo` with `edge-slim-sudo` and `img-<v>-slim-sudo` moving alongside | slim plus passwordless sudo | Assembling an environment interactively |
-| `ghcr.io/fgrehm/bb:0.43.1-full-sudo` with `edge-full-sudo` and `img-<v>-full-sudo` moving alongside | the default image plus passwordless sudo | Long-lived development containers; also the bb-source contributor environment |
+| `ghcr.io/fgrehm/bb:slim` and version pins like `img-<v>-slim`, `0.43.3-slim` | Debian, node, bb, mise, lazy `pnpm` + agent CLIs. No Chromium, dev tools, DB clients, document tools, compilers, or sudo. ~925MB vs ~2,398MB | A small bb runtime you size up yourself |
+| `ghcr.io/fgrehm/bb:0.43.3-slim-sudo` with `edge-slim-sudo` and `img-<v>-slim-sudo` moving alongside | slim plus passwordless sudo | Assembling an environment interactively |
+| `ghcr.io/fgrehm/bb:0.43.3-full-sudo` with `edge-full-sudo` and `img-<v>-full-sudo` moving alongside | the default image plus passwordless sudo | Long-lived development containers; also the bb-source contributor environment |
 
-The moving aliases are `latest` (which means full) and bare `slim`; the sudo flavors deliberately have no bare alias and are reached through their suffix pins, of which the three forms are `edge-<variant>` (the current `main` build), `0.43.1-<variant>` (the current baked bb), and `img-<version>-<variant>` (a frozen release by the image's own version).
+The moving aliases are `latest` (which means full) and bare `slim`; the sudo flavors deliberately have no bare alias and are reached through their suffix pins, of which the three forms are `edge-<variant>` (the current `main` build), `0.43.3-<variant>` (the current baked bb), and `img-<version>-<variant>` (a frozen release by the image's own version).
 
-Versioned tags carry a variant suffix (`0.43.1-slim`, `img-0.3.0-full-sudo`); the unsuffixed tags always mean `full`. Internally the container has sudo only: apt packages and mise tools installed at runtime live with the container and vanish when a disposable one stops, so sudo flavors want a named home volume and a non-`--rm` run.
+Versioned tags carry a variant suffix (`0.43.3-slim`, `img-0.3.0-full-sudo`); the unsuffixed tags always mean `full`. Internally the container has sudo only: apt packages and mise tools installed at runtime live with the container and vanish when a disposable one stops, so sudo flavors want a named home volume and a non-`--rm` run.
 
 The unsuffixed `latest`, `edge`, and bb-version tags stay on the full image; nothing about those tags changes. The full and slim non-sudo images keep the `no-new-privileges` security flag (`make run` and `make hack` set it), and the `-sudo` flavors are run without it (the Makefile derives it) because passwordless sudo depends on setuid. Choosing a sudo flavor means choosing that posture: the container itself is still rootless, but give it nothing you mind it owning (no host ssh keys mount, no podman socket, no broad host paths).
 
@@ -200,7 +200,7 @@ The image is meant to be layered on. `/opt/mise`, the mise data dir, is owned by
 Run those as `developer`, which is the image's default user. If a `Containerfile` needs `USER root` for `apt-get`, a `chmod` or a `chown`, switch back with `USER developer` before any install:
 
 ```dockerfile
-FROM ghcr.io/fgrehm/bb:0.43.1
+FROM ghcr.io/fgrehm/bb:0.43.3
 
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends your-tool \
@@ -278,7 +278,7 @@ The VM's disk replaces the container's named volume: `~/.bb`, caches, and shell 
 
 So `ghcr.io/fgrehm/bb:0.43.1` is the image for bb 0.43.1, while `:img-0.1.0` pins that exact image build.
 
-The bb tags follow the newest image for that bb release, so a node bump or a base digest refresh republishes them and anyone on `:0.43.1` picks the fix up. Pin `:img-<version>` when you want one specific build rather than one specific bb release. A prerelease tag publishes the `img-` tag and nothing else, so an rc cannot move the bb aliases or `latest`.
+The bb tags follow the newest image for that bb release, so a node bump or a base digest refresh republishes them and anyone on `:0.43.3` picks the fix up. Pin `:img-<version>` when you want one specific build rather than one specific bb release. A prerelease tag publishes the `img-` tag and nothing else, so an rc cannot move the bb aliases or `latest`.
 
 It publishes to GHCR as `ghcr.io/fgrehm/bb` using the built-in `GITHUB_TOKEN`, so there are no secrets to configure. That name is set by `IMAGE_NAME` in the workflow; it does not follow the repo name, which is `bb-image`.
 

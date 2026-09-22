@@ -7,7 +7,7 @@
 # be on.
 #
 # Until 0.2.0, the pullable tag was `edge`. Pin an exact build with `img-0.2.0`, or use a
-# bb version tag such as `0.43.1` to follow the bb release even when the image has not
+# bb version tag such as `0.43.3` to follow the bb release even when the image has not
 # been rebuilt.
 #
 #   smolvm machine create --name bb --smolfile examples/smolvm/Smolfile
