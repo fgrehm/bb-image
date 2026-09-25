@@ -6,6 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- `vm` and `vm-sudo` image flavors for long-lived microVMs. Both add systemd as PID 1 and an enabled `bb.service` running as `developer`; the standard `vm` follows full's no-sudo security profile, while `vm-sudo` explicitly adds passwordless guest sudo. Each guest initializes its own machine identity, bb and home state survive stop/start on the VM disk, and shutdown follows systemd service ordering. Published tags use the matching `-vm` or `-vm-sudo` suffix. The host-only `make check-smolvm-systemd` gate verifies boot, the normal target, service and API health, persistence, restart recovery, and bounded shutdown under smolvm.
+
+### Fixed
+
+- VM hostnames resolve locally through `nss-myhostname`, so guest sudo does not warn that smolvm's hostname is unknown.
+
 ## [0.3.2] - 2026-09-22
 
 Carries bb 0.43.4.

@@ -1,6 +1,6 @@
 # Backups
 
-`/usr/local/share/bb/bb-backup` has three subcommands and no default: `backup` (the recovery archive), `traces` (the additive mirror), and `verify`. A bare `bb-backup` prints usage. It does not schedule anything: the image is rootless and ships no boot-time service, so the timer lives wherever the container is run from (a host systemd user timer, a Quadlet, or a compose sidecar cron) and calls this script.
+`/usr/local/share/bb/bb-backup` has three subcommands and no default: `backup` (the recovery archive), `traces` (the additive mirror), and `verify`. A bare `bb-backup` prints usage. It does not schedule anything. Container deployments should call it from a host systemd user timer, a Quadlet, or a compose sidecar cron. The `vm` flavors have systemd and a managed bb service, but deliberately ship no backup timer; a derived VM can add one when its backup destination and retention policy are known.
 
 ## Recovery archive
 

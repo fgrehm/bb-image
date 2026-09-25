@@ -1,0 +1,15 @@
+# Run the bb `vm` flavor with systemd as workload PID 1. smolvm's default
+# VM-grade workload profile supplies the capabilities and mounts systemd needs.
+# Do not add --unprivileged when launching this target.
+image = "ghcr.io/fgrehm/bb:edge-vm"
+net = true
+
+[dev]
+ports = ["38886:38886"]
+
+[health]
+exec = ["curl", "-fsS", "http://127.0.0.1:38886/api/v1/hosts"]
+interval = "5s"
+timeout = "5s"
+retries = 12
+startup_grace = "90s"

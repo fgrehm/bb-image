@@ -1,6 +1,6 @@
 # bb-image
 
-Container image for running [bb](https://getbb.app) rootless with your projects and persistent state. Published at `ghcr.io/fgrehm/bb`.
+OCI image family for running [bb](https://getbb.app) with projects and persistent state: rootless container flavors and systemd-based microVM flavors. Published at `ghcr.io/fgrehm/bb`.
 
 ## Choose an image
 
@@ -10,10 +10,12 @@ Container image for running [bb](https://getbb.app) rootless with your projects 
 | Slim | `slim`, `edge-slim`, `0.43.4-slim`, `img-0.3.2-slim` | bb, Node.js, mise, lazy pnpm and agent CLIs, without Chromium or dev tools |
 | Slim with sudo | `edge-slim-sudo`, `0.43.4-slim-sudo`, `img-0.3.2-slim-sudo` | Slim plus passwordless container sudo |
 | Full with sudo | `edge-full-sudo`, `0.43.4-full-sudo`, `img-0.3.2-full-sudo` | Full plus passwordless container sudo |
+| VM | `edge-vm`, `0.43.4-vm`, `img-<version>-vm` | Full, systemd as PID 1, and bb as an enabled service, without sudo |
+| VM with sudo | `edge-vm-sudo`, `0.43.4-vm-sudo`, `img-<version>-vm-sudo` | VM plus passwordless guest sudo |
 
-Full keeps unsuffixed tags. `latest` and `slim` are moving aliases; sudo flavors have no bare moving aliases. Sudo operates inside the rootless container, but requires dropping `no-new-privileges`. See [running and security options](docs/running.md) and [tag policy](docs/publishing.md).
+Full keeps unsuffixed tags. `latest` and `slim` are moving aliases; sudo and VM flavors have no bare moving aliases. Sudo is opt-in and operates inside the rootless container or isolated VM guest. Container sudo requires dropping `no-new-privileges`; both VM images require smolvm's default VM-grade workload profile rather than `--unprivileged`. See [running and security options](docs/running.md), [running as a microVM](docs/smolvm.md), and [tag policy](docs/publishing.md).
 
-## Run it
+## Run it as a container
 
 ```bash
 make ci     # build and verify the full image locally
@@ -35,7 +37,7 @@ Use `make ci FLAVOR=slim TAG=slim` to build and check another flavor. For direct
 - [Backups](docs/backups.md): recovery archives and additive trace mirroring with `bb-backup`.
 - [Using this image as a base](docs/derived-images.md): ownership, tool installs, cache paths, and entrypoint contracts.
 - [Developing bb](docs/developing-bb.md): build and run bb from a checkout using `full-sudo`.
-- [Running as a microVM](docs/smolvm.md): the [smolvm](https://smolmachines.com) example.
+- [Running as a microVM](docs/smolvm.md): the systemd-based `vm` flavor and [smolvm](https://smolmachines.com) examples.
 - [Publishing](docs/publishing.md): tags, release workflow, and architecture support.
 - [Changelog](CHANGELOG.md): changes to the image itself.
 

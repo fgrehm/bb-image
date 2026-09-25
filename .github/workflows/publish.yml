@@ -29,9 +29,12 @@ env:
   # means adding a docker/setup-qemu-action step; emulation is the only reason
   # that step exists, and it is dead weight while the platform list stays native.
   PLATFORMS: linux/amd64
+  # Host gate for the VM flavor. The archive and its checksum are fetched from
+  # the matching upstream release rather than piping an installer into CI.
+  SMOLVM_VERSION: 1.18.2
   # The published image family. The Containerfile stages and the check flavors
   # use the same names; the majority of the steps are identical per flavor.
-  FLAVORS: full slim slim-sudo full-sudo
+  FLAVORS: full slim slim-sudo full-sudo vm vm-sudo
 
 jobs:
   publish:
@@ -53,6 +56,10 @@ jobs:
             suffix: -slim-sudo
           - flavor: full-sudo
             suffix: -full-sudo
+          - flavor: vm
+            suffix: -vm
+          - flavor: vm-sudo
+            suffix: -vm-sudo
     permissions:
       contents: write
       packages: write
@@ -183,6 +190,46 @@ jobs:
           TAG: staged-${{ matrix.flavor }}
           FLAVOR: ${{ matrix.flavor }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cache smolvm
+        if: startsWith(matrix.flavor, 'vm')
+        id: smolvm-cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/bb-image/smolvm-${{ env.SMOLVM_VERSION }}
+          key: smolvm-${{ runner.os }}-${{ runner.arch }}-${{ env.SMOLVM_VERSION }}
+
+      - name: Install smolvm for VM gate
+        if: startsWith(matrix.flavor, 'vm') && steps.smolvm-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          asset="smolvm-${SMOLVM_VERSION}-linux-x86_64.tar.gz"
+          base="https://github.com/smol-machines/smolvm/releases/download/v${SMOLVM_VERSION}"
+          curl -fsSLO "${base}/${asset}"
+          curl -fsSLO "${base}/checksums.sha256"
+          grep "  ${asset}$" checksums.sha256 | sha256sum -c -
+          mkdir -p "$HOME/.cache/bb-image/smolvm-${SMOLVM_VERSION}"
+          tar -xzf "$asset" --strip-components=1 \
+            -C "$HOME/.cache/bb-image/smolvm-${SMOLVM_VERSION}"
+
+      - name: Prepare smolvm host
+        if: startsWith(matrix.flavor, 'vm')
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -c /dev/kvm || { echo "GitHub runner has no KVM device" >&2; exit 1; }
+          sudo chmod 0666 /dev/kvm
+          echo "$HOME/.cache/bb-image/smolvm-${SMOLVM_VERSION}" >> "$GITHUB_PATH"
+
+      - name: Verify VM boot contract
+        if: startsWith(matrix.flavor, 'vm')
+        run: make check-smolvm-systemd ENGINE=docker
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          TAG: staged-${{ matrix.flavor }}
+          FLAVOR: ${{ matrix.flavor }}
+
       # The second build re-verifies and pushes. Both builds share the same
       # context, file, target, platforms, build-args, secrets AND labels, so an
       # ordinary cache hit reuses the exact filesystem layers that were

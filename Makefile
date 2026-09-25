@@ -55,13 +55,14 @@ USERNS ?= --userns=keep-id
 # Bubblewrap is unaffected, because creating a user namespace is not a privilege gain.
 #
 # sudo flavors cannot take this flag: passwordless sudo is setuid and stops
-# working under no-new-privileges. Choosing a -sudo FLAVOR is choosing the
-# security posture, and the flag disappears with it. Override with SECURITY_OPTS=
-# if you need su inside a standard profile.
-ifeq (,$(findstring -sudo,$(FLAVOR)))
-SECURITY_OPTS ?= --security-opt no-new-privileges
-else
+# working under no-new-privileges. Both VM flavors need an unrestricted init
+# workload, even though the standard vm flavor has no sudo. Choosing one of
+# these flavors chooses the security posture, and the flag disappears with it.
+# Override with SECURITY_OPTS= if you need su inside a standard profile.
+ifneq (,$(filter %-sudo vm,$(FLAVOR)))
 SECURITY_OPTS ?=
+else
+SECURITY_OPTS ?= --security-opt no-new-privileges
 endif
 
 # Forward a GitHub token so mise's API calls are authenticated. Unauthenticated, mise
@@ -86,7 +87,7 @@ BUILD_SECRET = $(if $(GH_TOKEN),$(GH_TOKEN_SECRET))
 # Extra flags, e.g. RUN_ARGS='-v ~/src:/home/developer/src:Z'
 RUN_ARGS ?=
 
-.PHONY: build check ci fonts-regen hack run release
+.PHONY: build check ci check-smolvm-systemd fonts-regen hack run release
 
 build:
 	$(ENGINE) build -f container/Containerfile $(if $(TARGET),--target $(TARGET)) -t $(IMAGE):$(TAG) $(BUILD_SECRET) .
@@ -108,6 +109,11 @@ check:
 # Use `make ci` locally; CI still splits only for the cache/attestation split.
 ci: build
 	IMAGE=$(IMAGE) TAG=$(TAG) ENGINE=$(ENGINE) FLAVOR=$(FLAVOR) build/check.sh
+
+# Host-only boot gate for the systemd VM target. This requires smolvm and
+# KVM/libkrun, so it is deliberately separate from the container-safe checks.
+check-smolvm-systemd:
+	IMAGE=$(IMAGE) TAG=$(TAG) ENGINE=$(ENGINE) FLAVOR=$(FLAVOR) build/check-smolvm-systemd.sh
 
 # Regenerates container/fonts.conf from the distro fontconfig inside the image;
 # the thing to do after a font package bump moves /etc/fonts/fonts.conf. The

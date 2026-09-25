@@ -1,5 +1,7 @@
 # Running bb
 
+This guide covers the rootless container flavors. The `vm` and `vm-sudo` flavors boot systemd under smolvm instead; see [Running as a microVM](smolvm.md).
+
 ```bash
 make build
 make run     # serves bb on http://localhost:38886
@@ -24,7 +26,7 @@ podman run -d --name bb \
   bb:dev
 ```
 
-`--security-opt no-new-privileges` is what `make run` and `make hack` pass. The base packages bring the standard Debian setuid binaries, including `su` and `mount`, and none of them is needed here, so this makes sure an agent cannot use them to reach container root. Drop the flag if you actually want `su` inside.
+`--security-opt no-new-privileges` is what `make run` and `make hack` pass for the standard `full` and `slim` container flavors. The `-sudo` container flavors omit it so setuid sudo can work. The base packages bring the standard Debian setuid binaries, including `su` and `mount`, and none of them is needed here, so this makes sure an agent cannot use them to reach container root. Drop the flag if you actually want `su` inside.
 
 `--userns=keep-id` is not optional in practice. Rootless podman maps container uid 1000 to a subordinate uid by default, so anything the container writes to a bind mount lands owned by a subuid and you cannot touch it on the host. `keep-id` maps it back to your own uid, and files come out owned by you.
 

@@ -15,7 +15,7 @@ fmt="$(shfmt -d build container 2>&1)" || {
 	echo "$fmt" >&2
 	exit 1
 }
-shellcheck build/check.sh build/check/*.sh container/entrypoint.sh \
+shellcheck build/check.sh build/check-smolvm-systemd.sh build/check/*.sh container/entrypoint.sh \
 	container/fontconfig.sh container/hydrate-home.sh container/bb-backup
 echo "shfmt and shellcheck ok"
 SH

@@ -573,6 +573,51 @@ CMD ["bash", "/home/developer/entrypoint.sh"]
 LABEL sh.bb.flavor="full-sudo"
 
 # ---------------------------------------------------------------------------
+# vm: a VM-only target with a real init system. It keeps full's locked-down
+# software profile, but boots systemd as root and runs bb as a developer-owned
+# service. Existing container targets retain their lightweight entrypoint and
+# unprivileged default user.
+# ---------------------------------------------------------------------------
+
+FROM full AS vm
+
+USER root
+COPY container/packages-vm-systemd.txt /tmp/packages-vm-systemd.txt
+RUN set -e; \
+    apt-get update \
+    && grep -vE '^(\s*(#.*)?)$' /tmp/packages-vm-systemd.txt \
+        | xargs apt-get install -y --no-install-recommends \
+    && sed -i -E 's/^hosts:.*/hosts: files myhostname dns/' /etc/nsswitch.conf \
+    && rm -rf /var/lib/apt/lists/* /tmp/packages-vm-systemd.txt
+
+COPY --chmod=0644 container/bb.service /etc/systemd/system/bb.service
+RUN set -e; \
+    systemctl enable bb.service \
+    && rm -f /etc/machine-id /var/lib/dbus/machine-id \
+    && : > /etc/machine-id
+
+STOPSIGNAL SIGRTMIN+3
+CMD ["/sbin/init"]
+LABEL sh.bb.flavor="vm"
+
+# ---------------------------------------------------------------------------
+# vm-sudo: the same systemd VM contract with passwordless guest sudo. This is
+# explicit rather than part of vm, matching the container variants' opt-in
+# elevation policy.
+# ---------------------------------------------------------------------------
+
+FROM vm AS vm-sudo
+
+RUN set -e; \
+    apt-get update \
+    && apt-get install -y --no-install-recommends sudo \
+    && rm -rf /var/lib/apt/lists/*
+COPY --chmod=0440 container/sudoers-developer /etc/sudoers.d/developer
+
+CMD ["/sbin/init"]
+LABEL sh.bb.flavor="vm-sudo"
+
+# ---------------------------------------------------------------------------
 # Final alias. Bare builds (no --target) and TARGET=release produce the same
 # artifact: the default full image behind today's unsuffixed tags. A stage with
 # no instructions adds nothing; it exists so that naming a target explicitly
