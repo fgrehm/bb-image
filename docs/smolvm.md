@@ -20,7 +20,7 @@ The example follows `edge-vm`. To use the elevated profile, copy it and change t
 
 Use smolvm's default VM-grade image profile. Do not add `--unprivileged`: that option deliberately removes capabilities, writable cgroups, and mounts that init systems need. The microVM is the isolation boundary. The standard `vm` flavor has no sudo; `vm-sudo` grants passwordless root only inside the guest. Do not mount a container-engine socket or broad sensitive host paths into either flavor by default.
 
-Both VM flavors use the repository's host gate:
+All systemd VM flavors use the repository's host gate. The exedev variant uses its own Smolfile and port 3000:
 
 ```bash
 make ci FLAVOR=vm TAG=vm
@@ -29,6 +29,10 @@ make check-smolvm-systemd FLAVOR=vm TAG=vm
 # The elevated profile has the same boot gate.
 make ci FLAVOR=vm-sudo TAG=vm-sudo
 make check-smolvm-systemd FLAVOR=vm-sudo TAG=vm-sudo
+
+# The exe.dev adapter uses the same systemd smoke gate, with SSH and port 3000.
+make ci FLAVOR=exedev TAG=exedev
+make check-smolvm-systemd FLAVOR=exedev TAG=exedev
 ```
 
 Each `make check-smolvm-systemd` invocation requires a host with smolvm and KVM/libkrun. It asserts systemd as workload PID 1, `multi-user.target`, bb service and API health, persistent home state, recovery after stop/start, and bounded shutdown.
