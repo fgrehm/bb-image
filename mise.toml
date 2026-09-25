@@ -71,12 +71,12 @@ gitleaks   = "8.30.1"
 
 # First use only. Bootstrap shims are created at build time and install
 # these on first invocation.
-ruby = { version = "4.0.6", lazy = true }
+ruby = { version = "4.0.7", lazy = true }
 bun = { version = "1.4.2", lazy = true }
 go = { version = "1.27.1", lazy = true }
 rust = { version = "1.98.1", lazy = true }
 python = { version = "3.14.7", lazy = true }
-gh = { version = "2.100.0", lazy = true }
+gh = { version = "2.101.0", lazy = true }
 
 # pnpm is here because agents meet pnpm projects, not because bb uses it. bb detects
 # package managers to report them and installs its plugins with npm, never pnpm. The
@@ -87,7 +87,7 @@ gh = { version = "2.100.0", lazy = true }
 # and runs whatever version a project declares in packageManager. Note that pnpm 10 and
 # later refuse to run dependency lifecycle scripts unless they are allow-listed, which is
 # why a native dependency can install cleanly and still be broken. `pnpm approve-builds`.
-pnpm = { version = "12.4.1", lazy = true }
+pnpm = { version = "12.6.0", lazy = true }
 
 # Pre-commit hooks. Deliberately unpinned.
 prek = { version = "latest", lazy = true }

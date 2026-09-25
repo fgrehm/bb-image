@@ -5,7 +5,7 @@ The image is meant to be layered on. `/opt/mise`, the mise data dir, is owned by
 Run those as `developer`, which is the default user in the container flavors. The VM flavors end as root because systemd must be PID 1, but `bb.service` still runs as `developer`; derived VM build steps must therefore switch users explicitly for mise or npm installs. If a `Containerfile` needs `USER root` for `apt-get`, a `chmod` or a `chown`, switch back with `USER developer` before any tool install:
 
 ```dockerfile
-FROM ghcr.io/fgrehm/bb:0.43.4
+FROM ghcr.io/fgrehm/bb:0.44.0
 
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends your-tool \

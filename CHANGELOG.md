@@ -1,6 +1,6 @@
 # Changelog
 
-Two versions move independently. **bb** owns the bare semver tags (`0.43.4`, `0.43`) and is baked into the image from `BB_VERSION` in the `Containerfile`. **The image** owns the `v*` git tags, published as `img-<tag>` alongside `latest`. An entry here belongs to the image version and names the bb version it carries.
+Two versions move independently. **bb** owns the bare semver tags (`0.44.0`, `0.44`) and is baked into the image from `BB_VERSION` in the `Containerfile`. **The image** owns the `v*` git tags, published as `img-<tag>` alongside `latest`. An entry here belongs to the image version and names the bb version it carries.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the image follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) with the bump meanings recorded in `AGENTS.md`: major for how the image is run, minor for new tools or a version bump, patch for a bb bump or a fix that moves nothing else.
 
@@ -11,6 +11,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - An `exedev` image flavor for exe.dev. It extends the systemd `vm` flavor with an SSH daemon, exe.dev's login-user label and init wrapper, and bb on port 3000 for the default HTTPS proxy. The base VM flavor remains SSH-free for smolvm.
 
 - `vm` and `vm-sudo` image flavors for long-lived microVMs. Both add systemd as PID 1 and an enabled `bb.service` running as `developer`; the standard `vm` follows full's no-sudo security profile, while `vm-sudo` explicitly adds passwordless guest sudo. Each guest initializes its own machine identity, bb and home state survive stop/start on the VM disk, and shutdown follows systemd service ordering. Published tags use the matching `-vm` or `-vm-sudo` suffix. The host-only `make check-smolvm-systemd` gate verifies boot, the normal target, service and API health, persistence, restart recovery, and bounded shutdown under smolvm.
+
+### Changed
+
+- Bumps the baked bb release from 0.43.4 to 0.44.0. The release adds diff filtering by glob, safer thread archiving with a 30-second undo and workspace restore, plugin safe mode, and Claude Code fast mode on supported Opus models; it also covers 0.43.4, which shipped without notes.
+- Bumps mise from 2026.9.5 to 2026.9.14, and moves the lazy pins that were behind: `gh` 2.100.0 to 2.101.0, `ruby` 4.0.6 to 4.0.7, and `pnpm` 12.4.1 to 12.6.0 (both the full and the slim toolset). node, Playwright, and the baked dev tools were already current.
 
 ### Fixed
 
