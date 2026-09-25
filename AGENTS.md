@@ -87,7 +87,7 @@ Two version axes. The bb release comes from `BB_VERSION` in the Containerfile; t
 | minor | new tools, a node or mise bump, a base digest refresh |
 | patch | a bb version bump, or a fix that moves nothing else |
 
-`make release VERSION=0.2.0` tags and pushes, which triggers the workflow. The tag message records the bb version so `git tag -n1` answers which bb is in which image without opening the Containerfile.
+`make release VERSION=0.2.0` tags and pushes, which triggers the workflow. The tag is signed and its message records the bb version so `git tag -n1` answers which bb is in which image without opening the Containerfile.
 
 A prerelease suffix such as `0.3.0-rc1` publishes `img-0.3.0-rc1` and nothing else. The bb aliases and `latest` are gated on stable tags, because otherwise an rc would silently become what people pull.
 

@@ -138,16 +138,17 @@ run:
 		$(IMAGE):$(TAG)
 
 # Tags the image's own version and pushes it, which is what triggers the publish
-# workflow. The tag carries the bb version in its message so `git tag -n` answers
-# "which bb is in this one" without opening the Containerfile. A version with a
-# prerelease suffix, such as 0.3.0-rc1, publishes an img- tag only and does not
-# move the bb aliases or latest.
+# workflow. The tag is signed (git tag -s, so it uses whatever signing format your
+# git config declares) and carries the bb version in its message so `git tag -n`
+# answers "which bb is in this one" without opening the Containerfile. A version
+# with a prerelease suffix, such as 0.3.0-rc1, publishes an img- tag only and does
+# not move the bb aliases or latest.
 release:
 	@test -n "$(VERSION)" || { echo "usage: make release VERSION=0.2.0" >&2; exit 1; }
 	@test -z "$$(git status --porcelain)" || { echo "working tree is dirty" >&2; exit 1; }
 	@if git rev-parse -q --verify "refs/tags/v$(VERSION)" >/dev/null; then \
 		echo "tag v$(VERSION) already exists" >&2; exit 1; \
 	fi
-	git tag -a "v$(VERSION)" -m "image $(VERSION), bb $(BB_VERSION)"
+	git tag -s "v$(VERSION)" -m "image $(VERSION), bb $(BB_VERSION)"
 	git push origin "v$(VERSION)"
 	@echo "pushed v$(VERSION) (bb $(BB_VERSION)); watch it at https://github.com/fgrehm/bb-image/actions"
