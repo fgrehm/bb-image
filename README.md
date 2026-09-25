@@ -6,13 +6,13 @@ OCI image family for running [bb](https://getbb.app) with projects and persisten
 
 | Flavor | Tags | Includes |
 | --- | --- | --- |
-| Full (default) | `latest`, `edge`, `0.44.0`, `img-0.3.2` | bb, Node.js, Playwright + Chromium, dev tools, DB and document tools, backups |
-| Slim | `slim`, `edge-slim`, `0.44.0-slim`, `img-0.3.2-slim` | bb, Node.js, mise, lazy pnpm and agent CLIs, without Chromium or dev tools |
-| Slim with sudo | `edge-slim-sudo`, `0.44.0-slim-sudo`, `img-0.3.2-slim-sudo` | Slim plus passwordless container sudo |
-| Full with sudo | `edge-full-sudo`, `0.44.0-full-sudo`, `img-0.3.2-full-sudo` | Full plus passwordless container sudo |
-| VM | `edge-vm`, `0.44.0-vm`, `img-<version>-vm` | Full, systemd as PID 1, and bb as an enabled service, without sudo |
-| VM with sudo | `edge-vm-sudo`, `0.44.0-vm-sudo`, `img-<version>-vm-sudo` | VM plus passwordless guest sudo |
-| exe.dev | `edge-exedev`, `0.44.0-exedev`, `img-<version>-exedev` | VM plus SSH and exe.dev integration, with bb on port 3000 |
+| Full (default) | `latest`, `edge`, `0.44.0`, `img-0.4.0` | bb, Node.js, Playwright + Chromium, dev tools, DB and document tools, backups |
+| Slim | `slim`, `edge-slim`, `0.44.0-slim`, `img-0.4.0-slim` | bb, Node.js, mise, lazy pnpm and agent CLIs, without Chromium or dev tools |
+| Slim with sudo | `edge-slim-sudo`, `0.44.0-slim-sudo`, `img-0.4.0-slim-sudo` | Slim plus passwordless container sudo |
+| Full with sudo | `edge-full-sudo`, `0.44.0-full-sudo`, `img-0.4.0-full-sudo` | Full plus passwordless container sudo |
+| VM | `edge-vm`, `0.44.0-vm`, `img-0.4.0-vm` | Full, systemd as PID 1, and bb as an enabled service, without sudo |
+| VM with sudo | `edge-vm-sudo`, `0.44.0-vm-sudo`, `img-0.4.0-vm-sudo` | VM plus passwordless guest sudo |
+| exe.dev | `edge-exedev`, `0.44.0-exedev`, `img-0.4.0-exedev` | VM plus SSH and exe.dev integration, with bb on port 3000 |
 
 Full keeps unsuffixed tags. `latest` and `slim` are moving aliases; sudo, VM, and exe.dev flavors have no bare moving aliases. Sudo is opt-in and operates inside the rootless container or isolated VM guest. Container sudo requires dropping `no-new-privileges`; VM images require smolvm's default VM-grade workload profile rather than `--unprivileged`. The `exedev` flavor is for [exe.dev](https://exe.dev/docs/customization) and uses its own SSH/runtime integration. See [running and security options](docs/running.md), [running as a microVM](docs/smolvm.md), and [tag policy](docs/publishing.md).
 

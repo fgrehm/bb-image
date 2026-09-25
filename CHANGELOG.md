@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-25
+
+Carries bb 0.44.0.
+
 ### Added
 
 - An `exedev` image flavor for exe.dev. It extends the systemd `vm` flavor with an SSH daemon, exe.dev's login-user label and init wrapper, and bb on port 3000 for the default HTTPS proxy. The base VM flavor remains SSH-free for smolvm.
