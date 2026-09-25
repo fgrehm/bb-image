@@ -1,0 +1,14 @@
+# Local smolvm smoke definition for the exedev image. exe.dev uses the same
+# systemd/SSH contract, but does not use a Smolfile.
+image = "bb:exedev"
+net = true
+
+[dev]
+ports = ["3000:3000"]
+
+[health]
+exec = ["curl", "-fsS", "http://127.0.0.1:3000/api/v1/hosts"]
+interval = "5s"
+timeout = "5s"
+retries = 12
+startup_grace = "90s"

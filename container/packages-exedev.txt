@@ -1,0 +1,4 @@
+# exe.dev's custom VM image needs an SSH daemon for the host's SSH access.
+# Host keys remain generated per VM and are never baked into the image.
+
+openssh-server

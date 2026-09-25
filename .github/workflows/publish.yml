@@ -34,7 +34,7 @@ env:
   SMOLVM_VERSION: 1.18.2
   # The published image family. The Containerfile stages and the check flavors
   # use the same names; the majority of the steps are identical per flavor.
-  FLAVORS: full slim slim-sudo full-sudo vm vm-sudo
+  FLAVORS: full slim slim-sudo full-sudo vm vm-sudo exedev
 
 jobs:
   publish:
@@ -60,6 +60,8 @@ jobs:
             suffix: -vm
           - flavor: vm-sudo
             suffix: -vm-sudo
+          - flavor: exedev
+            suffix: -exedev
     permissions:
       contents: write
       packages: write
@@ -192,7 +194,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Cache smolvm
-        if: startsWith(matrix.flavor, 'vm')
+        if: matrix.flavor == 'vm' || matrix.flavor == 'vm-sudo' || matrix.flavor == 'exedev'
         id: smolvm-cache
         uses: actions/cache@v5
         with:
@@ -200,7 +202,7 @@ jobs:
           key: smolvm-${{ runner.os }}-${{ runner.arch }}-${{ env.SMOLVM_VERSION }}
 
       - name: Install smolvm for VM gate
-        if: startsWith(matrix.flavor, 'vm') && steps.smolvm-cache.outputs.cache-hit != 'true'
+        if: (matrix.flavor == 'vm' || matrix.flavor == 'vm-sudo' || matrix.flavor == 'exedev') && steps.smolvm-cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -214,7 +216,7 @@ jobs:
             -C "$HOME/.cache/bb-image/smolvm-${SMOLVM_VERSION}"
 
       - name: Prepare smolvm host
-        if: startsWith(matrix.flavor, 'vm')
+        if: matrix.flavor == 'vm' || matrix.flavor == 'vm-sudo' || matrix.flavor == 'exedev'
         shell: bash
         run: |
           set -euo pipefail
@@ -223,7 +225,7 @@ jobs:
           echo "$HOME/.cache/bb-image/smolvm-${SMOLVM_VERSION}" >> "$GITHUB_PATH"
 
       - name: Verify VM boot contract
-        if: startsWith(matrix.flavor, 'vm')
+        if: matrix.flavor == 'vm' || matrix.flavor == 'vm-sudo' || matrix.flavor == 'exedev'
         run: make check-smolvm-systemd ENGINE=docker
         env:
           IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}

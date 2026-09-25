@@ -1,0 +1,28 @@
+[Unit]
+Description=bb agentic development environment
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=developer
+Group=developer
+WorkingDirectory=/home/developer
+Environment=HOME=/home/developer
+Environment=USER=developer
+Environment=LOGNAME=developer
+Environment=MISE_DATA_DIR=/opt/mise
+Environment=MISE_GLOBAL_CONFIG_FILE=/opt/mise/config.toml
+Environment=PATH=/opt/mise/shims:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
+Environment=FONTCONFIG_FILE=/usr/local/share/bb/fonts.conf
+EnvironmentFile=-/etc/default/bb
+ExecStartPre=/usr/local/share/bb/hydrate-home.sh install
+ExecStart=/opt/mise/shims/bb-app --server-bind-host 0.0.0.0 --server-port 3000
+Restart=on-failure
+RestartSec=2s
+TimeoutStopSec=20s
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target

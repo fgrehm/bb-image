@@ -1,0 +1,11 @@
+[Unit]
+Description=Generate SSH host keys for this VM
+Before=ssh.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/ssh-keygen -A
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

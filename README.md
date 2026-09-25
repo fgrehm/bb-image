@@ -12,8 +12,9 @@ OCI image family for running [bb](https://getbb.app) with projects and persisten
 | Full with sudo | `edge-full-sudo`, `0.43.4-full-sudo`, `img-0.3.2-full-sudo` | Full plus passwordless container sudo |
 | VM | `edge-vm`, `0.43.4-vm`, `img-<version>-vm` | Full, systemd as PID 1, and bb as an enabled service, without sudo |
 | VM with sudo | `edge-vm-sudo`, `0.43.4-vm-sudo`, `img-<version>-vm-sudo` | VM plus passwordless guest sudo |
+| exe.dev | `edge-exedev`, `0.43.4-exedev`, `img-<version>-exedev` | VM plus SSH and exe.dev integration, with bb on port 3000 |
 
-Full keeps unsuffixed tags. `latest` and `slim` are moving aliases; sudo and VM flavors have no bare moving aliases. Sudo is opt-in and operates inside the rootless container or isolated VM guest. Container sudo requires dropping `no-new-privileges`; both VM images require smolvm's default VM-grade workload profile rather than `--unprivileged`. See [running and security options](docs/running.md), [running as a microVM](docs/smolvm.md), and [tag policy](docs/publishing.md).
+Full keeps unsuffixed tags. `latest` and `slim` are moving aliases; sudo, VM, and exe.dev flavors have no bare moving aliases. Sudo is opt-in and operates inside the rootless container or isolated VM guest. Container sudo requires dropping `no-new-privileges`; VM images require smolvm's default VM-grade workload profile rather than `--unprivileged`. The `exedev` flavor is for [exe.dev](https://exe.dev/docs/customization) and uses its own SSH/runtime integration. See [running and security options](docs/running.md), [running as a microVM](docs/smolvm.md), and [tag policy](docs/publishing.md).
 
 ## Run it as a container
 
@@ -38,6 +39,7 @@ Use `make ci FLAVOR=slim TAG=slim` to build and check another flavor. For direct
 - [Using this image as a base](docs/derived-images.md): ownership, tool installs, cache paths, and entrypoint contracts.
 - [Developing bb](docs/developing-bb.md): build and run bb from a checkout using `full-sudo`.
 - [Running as a microVM](docs/smolvm.md): the systemd-based `vm` flavor and [smolvm](https://smolmachines.com) examples.
+- [Running on exe.dev](docs/exedev.md): the SSH-enabled `exedev` flavor and exe.dev setup.
 - [Publishing](docs/publishing.md): tags, release workflow, and architecture support.
 - [Changelog](CHANGELOG.md): changes to the image itself.
 

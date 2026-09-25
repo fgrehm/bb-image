@@ -2,7 +2,7 @@
 # img, root and say/crun come from there (SC2148/SC2153/SC2154 handled here).
 # shellcheck shell=sh disable=SC2154,SC2148
 # shellcheck source=build/check/lib.sh
-# check-flavors: full full-sudo
+# check-flavors: full full-sudo exedev
 
 # Chromium smoke: it must launch twice with a cold then warm fontconfig cache.
 # The write-level gate (what a942844 exists for) lives in 71 of this directory.

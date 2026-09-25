@@ -2,7 +2,7 @@
 # shellcheck source=build/check/lib.sh
 # Partials sourced by build/check.sh via build/check/lib.sh: IMAGE/TAG/ENGINE,
 # img, root and the say/crun helpers come from there.
-# check-flavors: full full-sudo
+# check-flavors: full full-sudo exedev
 
 # The gate a942844 exists for, asserted at syscall level via build/fcshim.c: an
 # interposer over chmod/unlink/openat that logs every fontconfig-related path

@@ -8,6 +8,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- An `exedev` image flavor for exe.dev. It extends the systemd `vm` flavor with an SSH daemon, exe.dev's login-user label and init wrapper, and bb on port 3000 for the default HTTPS proxy. The base VM flavor remains SSH-free for smolvm.
+
 - `vm` and `vm-sudo` image flavors for long-lived microVMs. Both add systemd as PID 1 and an enabled `bb.service` running as `developer`; the standard `vm` follows full's no-sudo security profile, while `vm-sudo` explicitly adds passwordless guest sudo. Each guest initializes its own machine identity, bb and home state survive stop/start on the VM disk, and shutdown follows systemd service ordering. Published tags use the matching `-vm` or `-vm-sudo` suffix. The host-only `make check-smolvm-systemd` gate verifies boot, the normal target, service and API health, persistence, restart recovery, and bounded shutdown under smolvm.
 
 ### Fixed

@@ -618,6 +618,39 @@ CMD ["/sbin/init"]
 LABEL sh.bb.flavor="vm-sudo"
 
 # ---------------------------------------------------------------------------
+# exedev: the exe.dev-specific VM. It keeps the vm software and systemd
+# contract, adds an SSH daemon for exe.dev access, and exposes bb on port
+# 3000, which exe.dev's HTTPS proxy forwards by default. The login user stays
+# `developer`; the exe.dev label is the adapter that tells the host which user
+# to use for SSH.
+# ---------------------------------------------------------------------------
+
+FROM vm AS exedev
+
+USER root
+COPY container/packages-exedev.txt /tmp/packages-exedev.txt
+RUN set -e; \
+    apt-get update \
+    && grep -vE '^(\s*(#.*)?)$' /tmp/packages-exedev.txt \
+        | xargs apt-get install -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/* /tmp/packages-exedev.txt \
+    && rm -f /etc/ssh/ssh_host_*_key /etc/ssh/ssh_host_*_key.pub
+
+COPY --chmod=0755 container/exedev-init.sh /usr/local/bin/init
+COPY --chmod=0644 container/exedev-bb.service /etc/systemd/system/bb.service
+COPY --chmod=0644 container/ssh-host-keys.service /etc/systemd/system/ssh-host-keys.service
+RUN set -e; \
+    systemctl enable bb.service ssh.service ssh-host-keys.service \
+    && mkdir -p /var/lib/systemd/linger/developer \
+    && touch /var/lib/systemd/linger/developer
+
+EXPOSE 3000
+STOPSIGNAL SIGRTMIN+3
+CMD ["/usr/local/bin/init"]
+LABEL "exe.dev/login-user"="developer"
+LABEL sh.bb.flavor="exedev"
+
+# ---------------------------------------------------------------------------
 # Final alias. Bare builds (no --target) and TARGET=release produce the same
 # artifact: the default full image behind today's unsuffixed tags. A stage with
 # no instructions adds nothing; it exists so that naming a target explicitly

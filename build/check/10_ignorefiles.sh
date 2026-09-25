@@ -2,7 +2,7 @@
 # img, root and say/crun come from there (SC2148/SC2153/SC2154 handled here).
 # shellcheck shell=sh disable=SC2154,SC2148
 # shellcheck source=build/check/lib.sh
-# check-flavors: full slim slim-sudo full-sudo
+# check-flavors: full slim slim-sudo full-sudo vm vm-sudo exedev
 
 # .dockerignore and .containerignore are two real files (a symlinked ignore file
 # trades one failure mode for another: not every consumer follows it), so they

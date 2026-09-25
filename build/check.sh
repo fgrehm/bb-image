@@ -22,7 +22,7 @@ export root
 # Flavors the harness knows about. Grows as the Containerfile grows targets;
 # a flavor listed here without a matching image is caught by the run itself,
 # while an unknown flavor below means a typo in a fragment declaration.
-known_flavors='full slim slim-sudo full-sudo vm vm-sudo'
+known_flavors='full slim slim-sudo full-sudo vm vm-sudo exedev'
 
 flavor="${FLAVOR:-full}"
 export FLAVOR="$flavor"

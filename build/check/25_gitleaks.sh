@@ -1,7 +1,7 @@
 # Partials sourced by build/check.sh via build/check/lib.sh; IMAGE/TAG/ENGINE,
 # img, root and say/crun come from there (SC2148/SC2153/SC2154 handled here).
 # shellcheck shell=sh disable=SC2154,SC2148
-# check-flavors: full full-sudo
+# check-flavors: full full-sudo exedev
 
 # gitleaks scans this repo, past and present: the git history, then the working
 # tree as it stands (including uncommitted files). gitleaks is baked into the

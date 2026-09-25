@@ -59,7 +59,7 @@ USERNS ?= --userns=keep-id
 # workload, even though the standard vm flavor has no sudo. Choosing one of
 # these flavors chooses the security posture, and the flag disappears with it.
 # Override with SECURITY_OPTS= if you need su inside a standard profile.
-ifneq (,$(filter %-sudo vm,$(FLAVOR)))
+ifneq (,$(filter %-sudo vm exedev,$(FLAVOR)))
 SECURITY_OPTS ?=
 else
 SECURITY_OPTS ?= --security-opt no-new-privileges

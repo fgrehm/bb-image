@@ -9,6 +9,19 @@ ENGINE="${ENGINE:-podman}"
 IMAGE="${IMAGE:-bb}"
 FLAVOR="${FLAVOR:-vm}"
 TAG="${TAG:-$FLAVOR}"
+case "$FLAVOR" in
+vm | vm-sudo | exedev) ;;
+*)
+	echo "unsupported VM flavor: $FLAVOR" >&2
+	exit 1
+	;;
+esac
+port=38886
+smolfile="$root/examples/smolvm-systemd/Smolfile"
+if [ "$FLAVOR" = exedev ]; then
+	port=3000
+	smolfile="$root/examples/exedev/Smolfile"
+fi
 name="bb-systemd-check-$$"
 tmp="${TMPDIR:-/tmp}/bb-systemd-check-$$"
 archive="$tmp/image.tar"
@@ -61,13 +74,6 @@ command -v "$ENGINE" >/dev/null 2>&1 || {
 }
 
 marker="$($ENGINE image inspect "$IMAGE:$TAG" --format '{{ index .Config.Labels "sh.bb.flavor" }}')"
-case "$FLAVOR" in
-vm | vm-sudo) ;;
-*)
-	echo "unsupported VM flavor: $FLAVOR (expected vm or vm-sudo)" >&2
-	exit 1
-	;;
-esac
 [ "$marker" = "$FLAVOR" ] || {
 	echo "$IMAGE:$TAG is marked '$marker', expected $FLAVOR" >&2
 	exit 1
@@ -75,7 +81,7 @@ esac
 
 "$ENGINE" save "$IMAGE:$TAG" -o "$archive"
 "$SMOLVM" machine create --name "$name" \
-	--smolfile "$root/examples/smolvm-systemd/Smolfile" \
+	--smolfile "$smolfile" \
 	--image "$archive"
 created=1
 
@@ -85,7 +91,7 @@ running=1
 ready=0
 for _ in $(seq 1 90); do
 	if "$SMOLVM" machine exec --name "$name" -- \
-		curl -fsS http://127.0.0.1:38886/api/v1/hosts >/dev/null 2>&1; then
+		curl -fsS "http://127.0.0.1:$port/api/v1/hosts" >/dev/null 2>&1; then
 		ready=1
 		break
 	fi
@@ -133,6 +139,11 @@ vm-sudo)
 	"$SMOLVM" machine exec --name "$name" -- \
 		su -s /bin/sh developer -c 'sudo -n true'
 	;;
+exedev)
+	"$SMOLVM" machine exec --name "$name" -- systemctl is-active --quiet ssh.service
+	"$SMOLVM" machine exec --name "$name" -- test -s /etc/ssh/ssh_host_ed25519_key
+	"$SMOLVM" machine exec --name "$name" -- test -s /etc/ssh/ssh_host_ed25519_key.pub
+	;;
 esac
 # HOME expands inside the guest's developer shell, not in this host script.
 # shellcheck disable=SC2016
@@ -147,7 +158,7 @@ ready=0
 for _ in $(seq 1 90); do
 	if "$SMOLVM" machine exec --name "$name" -- systemctl is-active --quiet bb.service 2>/dev/null &&
 		"$SMOLVM" machine exec --name "$name" -- \
-			curl -fsS http://127.0.0.1:38886/api/v1/hosts >/dev/null 2>&1; then
+			curl -fsS "http://127.0.0.1:$port/api/v1/hosts" >/dev/null 2>&1; then
 		ready=1
 		break
 	fi
