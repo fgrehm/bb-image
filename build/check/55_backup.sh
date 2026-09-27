@@ -51,6 +51,29 @@ tar -C /tmp/restore -xf "$arch"
 [ "$(cat /tmp/restore/tmp/src/data.txt)" = payload ]
 [ "$(sqlite3 /tmp/restore/tmp/src/.bb/bb.db 'select count(*) from t')" = 2 ]
 
+echo "state: discover bb and plugin state with consistent SQLite snapshots"
+mkdir -p /tmp/state/.bb/plugins/example/{logs,secrets,node_modules} /tmp/state/.pi/agent/sessions
+sqlite3 /tmp/state/.bb/bb.db 'create table core(x); insert into core values (7);'
+sqlite3 /tmp/state/.bb/plugins/example/data.db 'create table plugin(x); insert into plugin values (9);'
+printf 'runtime data\n' > /tmp/state/.bb/plugins/example/logs/plugin.log
+printf 'credential\n' > /tmp/state/.bb/plugins/example/secrets/apiKey
+printf 'managed source\n' > /tmp/state/.bb/plugins/example/node_modules/source.js
+printf 'thread trace\n' > /tmp/state/.pi/agent/sessions/t1.jsonl
+mkdir /tmp/state-out
+HOME=/tmp/state "$bb" state --output /tmp/state-out
+state_arch=$(ls /tmp/state-out/*.tar.zst)
+"$bb" verify "$state_arch"
+mkdir /tmp/state-restore
+tar -C /tmp/state-restore -xf "$state_arch"
+[ "$(sqlite3 /tmp/state-restore/tmp/state/.bb/bb.db 'select x from core')" = 7 ]
+[ "$(sqlite3 /tmp/state-restore/tmp/state/.bb/plugins/example/data.db 'select x from plugin')" = 9 ]
+[ "$(cat /tmp/state-restore/tmp/state/.bb/plugins/example/logs/plugin.log)" = 'runtime data' ]
+[ -e /tmp/state-restore/tmp/state/.pi/agent/sessions/t1.jsonl ]
+if tar -tf "$state_arch" | grep -E '/(secrets|node_modules)/|-(wal|shm)$'; then
+	echo "state profile included plugin secrets, managed source, or raw SQLite sidecars" >&2
+	exit 1
+fi
+
 echo "traces: additive rsync mirror"
 # A bare invocation assumes no strategy, by design.
 if "$bb" >/dev/null 2>&1; then

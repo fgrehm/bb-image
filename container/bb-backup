@@ -9,6 +9,7 @@
 #
 # Usage:
 #   bb-backup backup --output DIR [--sqlite PATH]... [--keep N] SRC [SRC...]
+#   bb-backup state --output DIR [--keep N]
 #   bb-backup traces --output DIR [--include PATH]... [--flatten]
 #   bb-backup verify FILE
 #
@@ -77,6 +78,7 @@ umask 077
 
 usage() {
 	echo "usage: bb-backup backup --output DIR [--sqlite PATH]... [--keep N] SRC [SRC...]" >&2
+	echo "       bb-backup state --output DIR [--keep N]" >&2
 	echo "       bb-backup traces --output DIR [--include PATH]... [--flatten]" >&2
 	echo "       bb-backup verify FILE" >&2
 	exit 2
@@ -89,12 +91,13 @@ sqlite_files=
 sources=
 trace_includes=
 flatten=0
+state_profile=0
 
 # The subcommand is the first argument and is required: there is deliberately
 # no default backup strategy for a bare invocation.
 [ $# -ge 1 ] || usage
 case "$1" in
-backup | traces | verify)
+backup | state | traces | verify)
 	mode="$1"
 	shift
 	;;
@@ -176,6 +179,48 @@ if [ "$mode" = verify ]; then
 	verify_one "$arg"
 	echo "bb-backup: archive intact: $arg"
 	exit 0
+fi
+
+if [ "$mode" = state ]; then
+	state_profile=1
+	[ "$arg" != '' ] || usage
+	[ "$sources" = '' ] && [ "$sqlite_files" = '' ] || usage
+	output="$arg"
+	# The state profile is intentionally bounded to bb-owned state plus the
+	# documented pi trace roots. Credentials and machine-wide home state are
+	# not inferred; plugin secrets and managed plugin code are excluded.
+	for p in "$HOME/.bb/bb.db" "$HOME/.bb/logs" "$HOME/.bb/pi-bridge-sessions" "$HOME/.bb/thread-storage" "$HOME/.pi/agent/sessions"; do
+		[ -e "$p" ] && sources="$sources $p"
+	done
+	plugin_root="$HOME/.bb/plugins"
+	if [ -d "$plugin_root" ]; then
+		for plugin in "$plugin_root"/*; do
+			[ -d "$plugin" ] || continue
+			case "$(basename -- "$plugin")" in
+			cache | runtime | node_modules | toolchain-*) continue ;;
+			esac
+			# Include per-plugin data files and runtime data directories, but
+			# never secrets, source/install trees, or caches.
+			for p in "$plugin"/*; do
+				[ -e "$p" ] || continue
+				case "$(basename -- "$p")" in
+				secrets | node_modules | runtime | cache | dist | build | src | source | install | installs) continue ;;
+				esac
+				sources="$sources $p"
+			done
+		done
+		# Find all SQLite databases under selected plugin state, excluding
+		# managed code/cache paths; SQLite .backup captures a consistent view.
+		discovered_dbs=$(find "$plugin_root" -type d \( -name secrets -o -name node_modules -o -name runtime -o -name cache -o -name dist -o -name build -o -name src -o -name source -o -name install -o -name installs \) -prune -o -type f \( -name '*.db' -o -name '*.sqlite' -o -name '*.sqlite3' \) -print)
+		sqlite_files="$sqlite_files $discovered_dbs"
+	fi
+	[ -f "$HOME/.bb/bb.db" ] && sqlite_files="$sqlite_files $HOME/.bb/bb.db"
+	[ "$sources" != '' ] || {
+		echo 'bb-backup: state: no bb state found' >&2
+		exit 1
+	}
+	# The generic source list includes plugin database originals. Their
+	# snapshots are appended at the same paths by the existing archive path.
 fi
 
 if [ "$mode" = traces ]; then
@@ -302,7 +347,11 @@ raw="$tmp.tar"
 # whitespace-separated path lists from the command line, and paths with
 # spaces in them are not supported.
 # shellcheck disable=SC2086
-tar -cf "$raw" $sources
+if [ "$state_profile" = 1 ]; then
+	tar -cf "$raw" --exclude='*/secrets' --exclude='*/node_modules' --exclude='*/runtime' --exclude='*/cache' --exclude='*/dist' --exclude='*/build' --exclude='*/src' --exclude='*/source' --exclude='*/install' --exclude='*/installs' --exclude='*/toolchain-*' --exclude='*-wal' --exclude='*-shm' $sources
+else
+	tar -cf "$raw" $sources
+fi
 for db in $sqlite_files; do
 	# The staged snapshot path is stripped of its leading slash and passed relative,
 	# so no separator is needed.

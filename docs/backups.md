@@ -4,6 +4,14 @@
 
 ## Recovery archive
 
+`backup` preserves explicit source selection for deployments with custom layouts. For this image's conventional bb-owned state, `state` discovers a bounded profile and uses the same snapshot, verification, retention, and restore machinery:
+
+```bash
+bb-backup state --output /backups --keep 7
+```
+
+The profile includes `~/.bb/bb.db`, bb logs, pi-bridge sessions, thread storage, pi agent sessions, and per-plugin state. It discovers plugin SQLite files (`*.db`, `*.sqlite`, and `*.sqlite3`) and snapshots them with SQLite's online backup API. Other plugin top-level data files and directories such as `logs/`, `host-data/`, and `bridge-data/` are included. Plugin `secrets/` are deliberately excluded because they can contain API keys and other credentials. Managed plugin code/install trees (including `toolchain-*` plugin installs), `node_modules`, runtime artifacts, caches, and raw SQLite `-wal`/`-shm` sidecars are excluded; their databases are represented by the consistent snapshots instead. It does not sweep the rest of `$HOME`; in particular, provider credentials and unrelated files are not included. If your deployment intentionally stores backup-worthy data elsewhere, use `backup` with explicit source paths and `--sqlite` arguments.
+
 ```bash
 bb-backup backup --output /backups --sqlite /home/developer/.bb/bb.db --keep 7 /home/developer
 ```
