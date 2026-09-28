@@ -1,11 +1,14 @@
 # Packages for the VM-only systemd target. One per line; # starts a comment.
 # VM targets add these init-system pieces to their container toolsets.
-# dbus supplies the system bus used by normal systemd services; systemd-sysv
-# installs /sbin/init as the boot command expected by the OCI metadata.
+# dbus supplies the system bus; dbus-user-session and libpam-systemd enable
+# developer's lingering rootless systemd user manager. systemd-sysv installs
+# /sbin/init as the boot command expected by the OCI metadata.
 # libnss-myhostname resolves the guest's dynamic hostname locally, including
 # smolvm's default, so sudo does not emit a hostname-resolution warning.
 
 dbus
+dbus-user-session
 libnss-myhostname
+libpam-systemd
 systemd
 systemd-sysv

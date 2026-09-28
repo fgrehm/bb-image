@@ -22,12 +22,10 @@ COPY --chmod=0644 container/exedev-bb.service /etc/systemd/system/bb.service
 RUN set -e; \
     systemctl enable bb.service \
     && systemctl disable ssh.service \
-    && if [ -e /usr/lib/systemd/system/ssh.socket ]; then systemctl disable ssh.socket; fi \
-    && mkdir -p /var/lib/systemd/linger/developer \
-    && touch /var/lib/systemd/linger/developer
+    && if [ -e /usr/lib/systemd/system/ssh.socket ]; then systemctl disable ssh.socket; fi
 
-# Linger starts developer's user manager at boot and keeps it alive without a
-# login; retain this while checking exe.dev's user-session contract.
+# vm enables linger for developer; it starts the user's systemd manager at boot
+# and keeps it alive without a login. Verify exe.dev's user-session needs live.
 # systemd uses SIGRTMIN+3 for an orderly shutdown when the VM runtime stops it.
 STOPSIGNAL SIGRTMIN+3
 CMD ["/usr/local/bin/init"]

@@ -226,6 +226,14 @@ jobs:
           TAG: staged-${{ matrix.flavor }}
           FLAVOR: ${{ matrix.flavor }}
 
+      - name: Verify rootless Podman CLI
+        if: matrix.flavor == 'vm' || matrix.flavor == 'vm-sudo' || matrix.flavor == 'exedev'
+        run: make check-smolvm-podman ENGINE=docker
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          TAG: staged-${{ matrix.flavor }}
+          FLAVOR: ${{ matrix.flavor }}
+
       # The second build re-verifies and pushes. Both builds share the same
       # context, file, target, platforms, build-args, secrets AND labels, so an
       # ordinary cache hit reuses the exact filesystem layers that were

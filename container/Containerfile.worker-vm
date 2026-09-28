@@ -9,23 +9,24 @@ FROM ${BASE_IMAGE} AS worker-vm
 
 USER root
 COPY container/packages-vm-systemd.txt /tmp/packages-vm-systemd.txt
+COPY container/packages-vm-podman.txt /tmp/packages-vm-podman.txt
 RUN set -e; \
     apt-get update \
-    && grep -vE '^(\s*(#.*)?)$' /tmp/packages-vm-systemd.txt \
+    && cat /tmp/packages-vm-systemd.txt /tmp/packages-vm-podman.txt \
+        | grep -vE '^(\s*(#.*)?)$' \
         | xargs apt-get install -y --no-install-recommends \
-    && apt-get install -y --no-install-recommends libpam-systemd dbus-user-session \
+    && systemctl disable podman.socket netavark-dhcp-proxy.socket netavark-dhcp-proxy.service \
     && sed -i -E 's/^hosts:.*/hosts: files myhostname dns/' /etc/nsswitch.conf \
-    && rm -rf /var/lib/apt/lists/* /tmp/packages-vm-systemd.txt \
+    && rm -rf /var/lib/apt/lists/* /tmp/packages-vm-systemd.txt /tmp/packages-vm-podman.txt \
     && install -d /var/lib/systemd/linger \
     && touch /var/lib/systemd/linger/developer \
     && install -d /etc/systemd/system/user@1000.service.d \
-    && printf '%s\n' '[Service]' \
-        'Environment=MISE_GLOBAL_CONFIG_FILE=/opt/mise/config.toml' \
-        'Environment=MISE_DATA_DIR=/opt/mise' \
-        'Environment=PATH=/opt/mise/shims:/usr/local/bin:/usr/bin:/bin' \
-        > /etc/systemd/system/user@1000.service.d/mise.conf \
     && rm -f /etc/machine-id /var/lib/dbus/machine-id \
     && : > /etc/machine-id
+
+COPY --chmod=0644 container/user-manager-mise.conf /etc/systemd/system/user@1000.service.d/mise.conf
+COPY --chmod=0644 container/containers-vm-podman.conf /etc/containers/containers.conf
+COPY --chmod=0644 container/podman-tun.conf /etc/tmpfiles.d/bb-podman-tun.conf
 
 STOPSIGNAL SIGRTMIN+3
 CMD ["/sbin/init"]

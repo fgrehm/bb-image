@@ -10,13 +10,24 @@ FROM ${BASE_IMAGE} AS vm
 
 USER root
 COPY container/packages-vm-systemd.txt /tmp/packages-vm-systemd.txt
+COPY container/packages-vm-podman.txt /tmp/packages-vm-podman.txt
+# Linger keeps developer's user manager alive for rootless Podman cgroup
+# delegation; no Podman API socket is enabled.
 RUN set -e; \
     apt-get update \
-    && grep -vE '^(\s*(#.*)?)$' /tmp/packages-vm-systemd.txt \
+    && cat /tmp/packages-vm-systemd.txt /tmp/packages-vm-podman.txt \
+        | grep -vE '^(\s*(#.*)?)$' \
         | xargs apt-get install -y --no-install-recommends \
+    && systemctl disable podman.socket netavark-dhcp-proxy.socket netavark-dhcp-proxy.service \
     && sed -i -E 's/^hosts:.*/hosts: files myhostname dns/' /etc/nsswitch.conf \
-    && rm -rf /var/lib/apt/lists/* /tmp/packages-vm-systemd.txt
+    && rm -rf /var/lib/apt/lists/* /tmp/packages-vm-systemd.txt /tmp/packages-vm-podman.txt \
+    && install -d /var/lib/systemd/linger \
+    && touch /var/lib/systemd/linger/developer \
+    && install -d /etc/systemd/system/user@1000.service.d
 
+COPY --chmod=0644 container/user-manager-mise.conf /etc/systemd/system/user@1000.service.d/mise.conf
+COPY --chmod=0644 container/containers-vm-podman.conf /etc/containers/containers.conf
+COPY --chmod=0644 container/podman-tun.conf /etc/tmpfiles.d/bb-podman-tun.conf
 COPY --chmod=0644 container/bb.service /etc/systemd/system/bb.service
 RUN set -e; \
     systemctl enable bb.service \

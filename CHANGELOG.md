@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- Rootless Podman CLI in systemd VM flavors and `worker-vm`, with no Podman API socket. Local Podman image metadata shows an approximately 300 MiB increase in unpacked VM image size; compressed registry transfer size was not measured.
+
 ### Changed
 
 - Refresh the pinned Debian 13 base to the current linux/amd64 image manifest.

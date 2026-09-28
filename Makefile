@@ -80,7 +80,7 @@ export GH_TOKEN
 # Extra flags, e.g. RUN_ARGS='-v ~/src:/home/developer/src:Z'
 RUN_ARGS ?=
 
-.PHONY: build check ci check-smolvm-systemd fonts-regen hack run release
+.PHONY: build check ci check-smolvm-systemd check-smolvm-podman fonts-regen hack run release
 
 build:
 	@test -z "$(TARGET)" || { echo "TARGET is no longer supported; use FLAVOR=$(FLAVOR) or set FLAVOR=<variant>" >&2; exit 1; }
@@ -108,6 +108,10 @@ ci: build
 # KVM/libkrun, so it is deliberately separate from the container-safe checks.
 check-smolvm-systemd:
 	IMAGE=$(IMAGE) TAG=$(TAG) ENGINE=$(ENGINE) FLAVOR=$(FLAVOR) build/check-smolvm-systemd.sh
+
+# Host-only rootless Podman smoke test inside a VM-grade microVM.
+check-smolvm-podman:
+	IMAGE=$(IMAGE) TAG=$(TAG) ENGINE=$(ENGINE) FLAVOR=$(FLAVOR) build/check-smolvm-podman.sh
 
 # Regenerates container/fonts.conf from the distro fontconfig inside the image;
 # the thing to do after a font package bump moves /etc/fonts/fonts.conf. The

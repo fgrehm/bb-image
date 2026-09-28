@@ -1,0 +1,14 @@
+# Podman CLI and the optional pieces used by rootless VM workloads.
+# podman provides the CLI; buildah supports `podman build`, and aardvark-dns
+# provides DNS for user-defined netavark networks. No Podman API service/socket
+# is enabled. The VM image configures slirp4netns because pasta networking does
+# not work in the current smolvm guest.
+
+podman
+buildah
+aardvark-dns
+catatonit
+containers-storage
+uidmap
+fuse-overlayfs
+slirp4netns
