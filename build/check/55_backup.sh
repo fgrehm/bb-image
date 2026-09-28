@@ -52,9 +52,13 @@ tar -C /tmp/restore -xf "$arch"
 [ "$(sqlite3 /tmp/restore/tmp/src/.bb/bb.db 'select count(*) from t')" = 2 ]
 
 echo "state: discover bb and plugin state with consistent SQLite snapshots"
-mkdir -p /tmp/state/.bb/plugins/example/{logs,secrets,node_modules} /tmp/state/.pi/agent/sessions /tmp/state/.bb/pi-extras-sessions
+mkdir -p /tmp/state/.bb/plugins/example/{logs,secrets,node_modules} /tmp/state/.bb/plugins/{git,npm} /tmp/state/.pi/agent/sessions /tmp/state/.bb/pi-extras-sessions
 sqlite3 /tmp/state/.bb/bb.db 'create table core(x); insert into core values (7);'
 sqlite3 /tmp/state/.bb/plugins/example/data.db 'create table plugin(x); insert into plugin values (9);'
+sqlite3 /tmp/state/.bb/plugins/git/managed.db 'create table managed(x); insert into managed values (1);'
+sqlite3 /tmp/state/.bb/plugins/npm/managed.sqlite 'create table managed(x); insert into managed values (1);'
+printf 'managed git source\n' > /tmp/state/.bb/plugins/git/source.js
+printf 'managed npm source\n' > /tmp/state/.bb/plugins/npm/package.json
 printf 'runtime data\n' > /tmp/state/.bb/plugins/example/logs/plugin.log
 printf 'credential\n' > /tmp/state/.bb/plugins/example/secrets/apiKey
 printf 'managed source\n' > /tmp/state/.bb/plugins/example/node_modules/source.js
@@ -71,8 +75,8 @@ tar -C /tmp/state-restore -xf "$state_arch"
 [ "$(cat /tmp/state-restore/tmp/state/.bb/plugins/example/logs/plugin.log)" = 'runtime data' ]
 [ -e /tmp/state-restore/tmp/state/.pi/agent/sessions/t1.jsonl ]
 [ -e /tmp/state-restore/tmp/state/.bb/pi-extras-sessions/pi-extras-title-test.jsonl ]
-if tar -tf "$state_arch" | grep -E '/(secrets|node_modules)/|-(wal|shm)$'; then
-	echo "state profile included plugin secrets, managed source, or raw SQLite sidecars" >&2
+if tar -tf "$state_arch" | grep -E '/secrets/|/\.bb/plugins/(git|npm)/|/node_modules/|-(wal|shm)$'; then
+	echo "state profile included plugin secrets, managed installs, or raw SQLite sidecars" >&2
 	exit 1
 fi
 

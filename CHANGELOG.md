@@ -9,6 +9,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Fixed
 
 - Add `bb-backup state` to discover and snapshot bb and plugin SQLite state, include plugin data and documented trace roots, and exclude credentials and managed source/cache files; preserve explicit `backup` selection for custom layouts.
+- Exclude the managed `git:` and `npm:` plugin install roots from state archives and SQLite discovery.
 - Include pi-extras title and commit traces from `~/.bb/pi-extras-sessions` in the generic state profile and default traces mirror.
 
 ## [0.4.0] - 2026-09-25

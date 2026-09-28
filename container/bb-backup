@@ -197,7 +197,7 @@ if [ "$mode" = state ]; then
 		for plugin in "$plugin_root"/*; do
 			[ -d "$plugin" ] || continue
 			case "$(basename -- "$plugin")" in
-			cache | runtime | node_modules | toolchain-*) continue ;;
+			cache | git | npm | runtime | node_modules | toolchain-*) continue ;;
 			esac
 			# Include per-plugin data files and runtime data directories, but
 			# never secrets, source/install trees, or caches.
@@ -211,7 +211,7 @@ if [ "$mode" = state ]; then
 		done
 		# Find all SQLite databases under selected plugin state, excluding
 		# managed code/cache paths; SQLite .backup captures a consistent view.
-		discovered_dbs=$(find "$plugin_root" -type d \( -name secrets -o -name node_modules -o -name runtime -o -name cache -o -name dist -o -name build -o -name src -o -name source -o -name install -o -name installs \) -prune -o -type f \( -name '*.db' -o -name '*.sqlite' -o -name '*.sqlite3' \) -print)
+		discovered_dbs=$(find "$plugin_root" -type d \( -path "$plugin_root/git" -o -path "$plugin_root/npm" -o -name secrets -o -name node_modules -o -name runtime -o -name cache -o -name dist -o -name build -o -name src -o -name source -o -name install -o -name installs \) -prune -o -type f \( -name '*.db' -o -name '*.sqlite' -o -name '*.sqlite3' \) -print)
 		sqlite_files="$sqlite_files $discovered_dbs"
 	fi
 	[ -f "$HOME/.bb/bb.db" ] && sqlite_files="$sqlite_files $HOME/.bb/bb.db"
@@ -348,7 +348,7 @@ raw="$tmp.tar"
 # spaces in them are not supported.
 # shellcheck disable=SC2086
 if [ "$state_profile" = 1 ]; then
-	tar -cf "$raw" --exclude='*/secrets' --exclude='*/node_modules' --exclude='*/runtime' --exclude='*/cache' --exclude='*/dist' --exclude='*/build' --exclude='*/src' --exclude='*/source' --exclude='*/install' --exclude='*/installs' --exclude='*/toolchain-*' --exclude='*-wal' --exclude='*-shm' $sources
+	tar -cf "$raw" --exclude='*/secrets' --exclude='*/.bb/plugins/git' --exclude='*/.bb/plugins/npm' --exclude='*/node_modules' --exclude='*/runtime' --exclude='*/cache' --exclude='*/dist' --exclude='*/build' --exclude='*/src' --exclude='*/source' --exclude='*/install' --exclude='*/installs' --exclude='*/toolchain-*' --exclude='*-wal' --exclude='*-shm' $sources
 else
 	tar -cf "$raw" $sources
 fi
