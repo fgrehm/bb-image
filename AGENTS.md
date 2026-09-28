@@ -198,6 +198,3 @@ podman stop -t 20 bbtest   # then confirm exit code 0, not 143 or 137
 
 Name test containers (`--name bbtest`) and remove them explicitly. A container left running holds its published port, which makes the next run fail to bind while something else answers on that port, and `podman ps --filter name=bb` is a substring match that will happily show you an unrelated `bb-yard-*` container. Use exact names or inspect the container by ID when checking status. Also check the port is free before concluding a run failed for another reason.
 
-## Review discipline
-
-Adversarial or code-review prompts and their findings are artifacts, not chat content: prompts live in `.agents/scratchpad/adversarial-review.md`, and findings written by reviewing agents go into a sibling `adversarial-review-*findings*.md` next to the prompt or round they belong to. Reviewing agents run nothing, please: no builds, containers, or commits; read the diff and the tree and report findings to the file.
