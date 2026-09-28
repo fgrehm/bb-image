@@ -52,13 +52,14 @@ tar -C /tmp/restore -xf "$arch"
 [ "$(sqlite3 /tmp/restore/tmp/src/.bb/bb.db 'select count(*) from t')" = 2 ]
 
 echo "state: discover bb and plugin state with consistent SQLite snapshots"
-mkdir -p /tmp/state/.bb/plugins/example/{logs,secrets,node_modules} /tmp/state/.pi/agent/sessions
+mkdir -p /tmp/state/.bb/plugins/example/{logs,secrets,node_modules} /tmp/state/.pi/agent/sessions /tmp/state/.bb/pi-extras-sessions
 sqlite3 /tmp/state/.bb/bb.db 'create table core(x); insert into core values (7);'
 sqlite3 /tmp/state/.bb/plugins/example/data.db 'create table plugin(x); insert into plugin values (9);'
 printf 'runtime data\n' > /tmp/state/.bb/plugins/example/logs/plugin.log
 printf 'credential\n' > /tmp/state/.bb/plugins/example/secrets/apiKey
 printf 'managed source\n' > /tmp/state/.bb/plugins/example/node_modules/source.js
 printf 'thread trace\n' > /tmp/state/.pi/agent/sessions/t1.jsonl
+printf 'pi-extras trace\n' > /tmp/state/.bb/pi-extras-sessions/pi-extras-title-test.jsonl
 mkdir /tmp/state-out
 HOME=/tmp/state "$bb" state --output /tmp/state-out
 state_arch=$(ls /tmp/state-out/*.tar.zst)
@@ -69,6 +70,7 @@ tar -C /tmp/state-restore -xf "$state_arch"
 [ "$(sqlite3 /tmp/state-restore/tmp/state/.bb/plugins/example/data.db 'select x from plugin')" = 9 ]
 [ "$(cat /tmp/state-restore/tmp/state/.bb/plugins/example/logs/plugin.log)" = 'runtime data' ]
 [ -e /tmp/state-restore/tmp/state/.pi/agent/sessions/t1.jsonl ]
+[ -e /tmp/state-restore/tmp/state/.bb/pi-extras-sessions/pi-extras-title-test.jsonl ]
 if tar -tf "$state_arch" | grep -E '/(secrets|node_modules)/|-(wal|shm)$'; then
 	echo "state profile included plugin secrets, managed source, or raw SQLite sidecars" >&2
 	exit 1
@@ -80,13 +82,15 @@ if "$bb" >/dev/null 2>&1; then
 	echo "bare bb-backup invocation must fail" >&2
 	exit 1
 fi
-mkdir -p /tmp/src/.claude/projects /tmp/src/.codex/sessions
+mkdir -p /tmp/src/.claude/projects /tmp/src/.codex/sessions /tmp/src/.bb/pi-extras-sessions
 printf 'claude-1\n' > /tmp/src/.claude/projects/c1.jsonl
 printf 'codex-1\n' > /tmp/src/.codex/sessions/x1.jsonl
+printf 'title trace\n' > /tmp/src/.bb/pi-extras-sessions/pi-extras-title-test.jsonl
 HOME=/tmp/src "$bb" traces --output /tmp/out
 [ "$(cat /tmp/out/tmp/src/.pi/agent/sessions/s1.jsonl)" = session-1 ]
 [ "$(cat /tmp/out/tmp/src/.claude/projects/c1.jsonl)" = claude-1 ]
 [ "$(cat /tmp/out/tmp/src/.codex/sessions/x1.jsonl)" = codex-1 ]
+[ "$(cat /tmp/out/tmp/src/.bb/pi-extras-sessions/pi-extras-title-test.jsonl)" = 'title trace' ]
 HOME=/tmp/src "$bb" traces --output /tmp/out | grep 'nothing new'
 sleep 1
 printf 'session-2\n' > /tmp/src/.pi/agent/sessions/s2.jsonl

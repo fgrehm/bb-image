@@ -10,7 +10,7 @@
 bb-backup state --output /backups --keep 7
 ```
 
-The profile includes `~/.bb/bb.db`, bb logs, pi-bridge sessions, thread storage, pi agent sessions, and per-plugin state. It discovers plugin SQLite files (`*.db`, `*.sqlite`, and `*.sqlite3`) and snapshots them with SQLite's online backup API. Other plugin top-level data files and directories such as `logs/`, `host-data/`, and `bridge-data/` are included. Plugin `secrets/` are deliberately excluded because they can contain API keys and other credentials. Managed plugin code/install trees (including `toolchain-*` plugin installs), `node_modules`, runtime artifacts, caches, and raw SQLite `-wal`/`-shm` sidecars are excluded; their databases are represented by the consistent snapshots instead. It does not sweep the rest of `$HOME`; in particular, provider credentials and unrelated files are not included. If your deployment intentionally stores backup-worthy data elsewhere, use `backup` with explicit source paths and `--sqlite` arguments.
+The profile includes `~/.bb/bb.db`, bb logs, pi-bridge sessions, pi-extras sessions, thread storage, pi agent sessions, and per-plugin state. It discovers plugin SQLite files (`*.db`, `*.sqlite`, and `*.sqlite3`) and snapshots them with SQLite's online backup API. Other plugin top-level data files and directories such as `logs/`, `host-data/`, and `bridge-data/` are included. Plugin `secrets/` are deliberately excluded because they can contain API keys and other credentials. Managed plugin code/install trees (including `toolchain-*` plugin installs), `node_modules`, runtime artifacts, caches, and raw SQLite `-wal`/`-shm` sidecars are excluded; their databases are represented by the consistent snapshots instead. It does not sweep the rest of `$HOME`; in particular, provider credentials and unrelated files are not included. If your deployment intentionally stores backup-worthy data elsewhere, use `backup` with explicit source paths and `--sqlite` arguments.
 
 ```bash
 bb-backup backup --output /backups --sqlite /home/developer/.bb/bb.db --keep 7 /home/developer
@@ -32,7 +32,7 @@ The read-only mount keeps bb free to serve while the archive runs; the sqlite sn
 
 ## Trace archival
 
-`bb-backup traces` mirrors agent session traces and logs into a directory with rsync, additively and independently of bb: pi sessions (`~/.pi/agent/sessions`), bb logs (`~/.bb/logs`), the pi bridge (`~/.bb/pi-bridge-sessions`), and claude and codex state (`~/.claude`, `~/.codex`) are included by default when they exist. Locations a deployment always wants can be baked into the environment with `BB_BACKUP_TRACES_INCLUDES` (colon-separated, like `PATH`, missing entries skipped), so a compose file or timer unit carries the convention without flags; `--include PATH` adds paths on top and must exist. It never prunes and never deletes: each run selects files with modification times newer than the `.traces-last` marker in the output directory, and a file the source later removes stays in the mirror if it was already copied. Run it before traces are deleted or rotated away; files removed between runs, or introduced with modification times older than the marker, are not captured.
+`bb-backup traces` mirrors agent session traces and logs into a directory with rsync, additively and independently of bb: pi sessions (`~/.pi/agent/sessions`), bb logs (`~/.bb/logs`), the pi bridge (`~/.bb/pi-bridge-sessions`), pi-extras title/commit traces (`~/.bb/pi-extras-sessions`), and claude and codex state (`~/.claude`, `~/.codex`) are included by default when they exist. Locations a deployment always wants can be baked into the environment with `BB_BACKUP_TRACES_INCLUDES` (colon-separated, like `PATH`, missing entries skipped), so a compose file or timer unit carries the convention without flags; `--include PATH` adds paths on top and must exist. It never prunes and never deletes: each run selects files with modification times newer than the `.traces-last` marker in the output directory, and a file the source later removes stays in the mirror if it was already copied. Run it before traces are deleted or rotated away; files removed between runs, or introduced with modification times older than the marker, are not captured.
 
 Two layouts, chosen with a flag. The default preserves full source paths in the mirror (`/traces/home/developer/.bb/logs/server.log`). `--flatten` merges every source into the target instead, structure below each include preserved — the shape a manual `rsync -av src/* dest/` produces. That is what a synced remote usually wants, one directory per tool rather than one per machine or container:
 
@@ -42,6 +42,7 @@ bb-backup traces --output /mnt/traces/this-host/pi --flatten \
     --include ~/.local/share/pairoot/home/.pi/agent/sessions
 bb-backup traces --output /mnt/traces/this-host/bb --flatten \
     --include ~/.bb/pi-bridge-sessions \
+    --include ~/.bb/pi-extras-sessions \
     --include ~/.local/share/pairoot/home/.bb/pi-bridge-sessions
 bb-backup traces --output /mnt/traces/work/claude --flatten \
     --include ~/.claude/projects \

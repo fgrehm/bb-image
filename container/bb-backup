@@ -65,7 +65,7 @@
 # Useful for restore flows and for timers that health-check old archives.
 #
 # traces archives agent session traces and logs (pi sessions, bb logs, the pi
-# bridge, claude and codex state by default; --include adds more) with rsync,
+# bridge, pi-extras sessions, claude and codex state by default; --include adds more) with rsync,
 # into the output directory itself, and is strictly additive: it never prunes,
 # never deletes, and each run copies only the files modified since the previous
 # run, tracked by a marker file in the output directory. A file deleted from
@@ -189,7 +189,7 @@ if [ "$mode" = state ]; then
 	# The state profile is intentionally bounded to bb-owned state plus the
 	# documented pi trace roots. Credentials and machine-wide home state are
 	# not inferred; plugin secrets and managed plugin code are excluded.
-	for p in "$HOME/.bb/bb.db" "$HOME/.bb/logs" "$HOME/.bb/pi-bridge-sessions" "$HOME/.bb/thread-storage" "$HOME/.pi/agent/sessions"; do
+	for p in "$HOME/.bb/bb.db" "$HOME/.bb/logs" "$HOME/.bb/pi-bridge-sessions" "$HOME/.bb/pi-extras-sessions" "$HOME/.bb/thread-storage" "$HOME/.pi/agent/sessions"; do
 		[ -e "$p" ] && sources="$sources $p"
 	done
 	plugin_root="$HOME/.bb/plugins"
@@ -239,7 +239,7 @@ if [ "$mode" = traces ]; then
 	# defaults and env entries are skipped without complaint, since not every
 	# CLI or mount is in use everywhere.
 	trace_paths=
-	for p in .pi/agent/sessions .bb/logs .bb/pi-bridge-sessions .claude .codex; do
+	for p in .pi/agent/sessions .bb/logs .bb/pi-bridge-sessions .bb/pi-extras-sessions .claude .codex; do
 		[ -d "$HOME/$p" ] && trace_paths="$trace_paths $HOME/$p"
 	done
 	oldIFS=$IFS
