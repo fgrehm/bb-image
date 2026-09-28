@@ -238,7 +238,10 @@ jobs:
       # unpinned `latest` tools are lazy, so they install nothing at build
       # time and cannot diverge.
 
+      # A workflow_dispatch on a feature branch is build-and-verify only. The
+      # metadata tag rules are intentionally limited to main and release tags.
       - name: Build and push
+        if: github.ref == 'refs/heads/main' || github.ref_type == 'tag'
         uses: docker/bake-action@v7
         with:
           source: .
