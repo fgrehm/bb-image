@@ -700,8 +700,9 @@ CMD ["sleep", "infinity"]
 LABEL sh.bb.flavor="worker"
 
 # worker-vm: the same BB-free environment with systemd for manually enrolled
-# machine services. Linger starts the developer user manager at boot, allowing
-# the installer to create its unprivileged user service; it is not enrollment.
+# machine services. PAM and the user bus let linger start developer's user
+# manager at boot; the installer can then create its unprivileged service.
+# None of this enrolls the worker.
 # ---------------------------------------------------------------------------
 
 FROM worker AS worker-vm
@@ -712,10 +713,17 @@ RUN set -e; \
     apt-get update \
     && grep -vE '^(\s*(#.*)?)$' /tmp/packages-vm-systemd.txt \
         | xargs apt-get install -y --no-install-recommends \
+    && apt-get install -y --no-install-recommends libpam-systemd dbus-user-session \
     && sed -i -E 's/^hosts:.*/hosts: files myhostname dns/' /etc/nsswitch.conf \
     && rm -rf /var/lib/apt/lists/* /tmp/packages-vm-systemd.txt \
     && install -d /var/lib/systemd/linger \
     && touch /var/lib/systemd/linger/developer \
+    && install -d /etc/systemd/system/user@1000.service.d \
+    && printf '%s\n' '[Service]' \
+        'Environment=MISE_GLOBAL_CONFIG_FILE=/opt/mise/config.toml' \
+        'Environment=MISE_DATA_DIR=/opt/mise' \
+        'Environment=PATH=/opt/mise/shims:/usr/local/bin:/usr/bin:/bin' \
+        > /etc/systemd/system/user@1000.service.d/mise.conf \
     && rm -f /etc/machine-id /var/lib/dbus/machine-id \
     && : > /etc/machine-id
 
