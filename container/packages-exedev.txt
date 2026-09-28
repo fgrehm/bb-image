@@ -1,4 +1,4 @@
-# exe.dev's custom VM image needs an SSH daemon for the host's SSH access.
-# Host keys remain generated per VM and are never baked into the image.
+# Keep SSH tooling installed while checking whether exe.dev provides access
+# without a guest ssh.service. The image disables the guest service.
 
 openssh-server

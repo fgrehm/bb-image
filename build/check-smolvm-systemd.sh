@@ -140,9 +140,9 @@ vm-sudo)
 		su -s /bin/sh developer -c 'sudo -n true'
 	;;
 exedev)
-	"$SMOLVM" machine exec --name "$name" -- systemctl is-active --quiet ssh.service
-	"$SMOLVM" machine exec --name "$name" -- test -s /etc/ssh/ssh_host_ed25519_key
-	"$SMOLVM" machine exec --name "$name" -- test -s /etc/ssh/ssh_host_ed25519_key.pub
+	"$SMOLVM" machine exec --name "$name" -- test -x /usr/sbin/sshd
+	"$SMOLVM" machine exec --name "$name" -- sh -c '! systemctl is-active --quiet ssh.service'
+	"$SMOLVM" machine exec --name "$name" -- test ! -e /etc/systemd/system/multi-user.target.wants/ssh.service
 	;;
 esac
 # HOME expands inside the guest's developer shell, not in this host script.

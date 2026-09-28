@@ -28,7 +28,7 @@ RUN mise install && mise reshim --force
 
 `MISE_GLOBAL_CONFIG_FILE` replaces mise's global config; it does not add another layer to the built-in config, and `~/.config/mise/conf.d/` is not read as a supplement when this override is set. Use `mise use -g` to add tools to the image's config, or provide one complete replacement file.
 
-If the derived image changes Node's global pin, bb can stop resolving entirely with `mise ERROR No version is set for shim: bb-app`. bb is installed into the image's baked mise-managed Node version, so keep that version aligned with `NODE_VERSION` unless you also reinstall bb into the replacement Node installation.
+If the derived image changes Node's global pin, bb can stop resolving entirely with `mise ERROR No version is set for shim: bb-app`. bb is installed into the image's baked mise-managed Node version, so keep that version aligned with `BB_NODE_VERSION` unless you also reinstall bb into the replacement Node installation.
 
 For derived builds that add several aqua-backed tools, forward a GitHub token as a BuildKit secret. The secret must be readable by `developer`, and it must not be an `ARG` or `ENV`:
 

@@ -12,9 +12,9 @@ OCI image family for running [bb](https://getbb.app) with projects and persisten
 | Full with sudo | `edge-full-sudo`, `0.44.0-full-sudo`, `img-0.4.0-full-sudo` | Full plus passwordless container sudo |
 | VM | `edge-vm`, `0.44.0-vm`, `img-0.4.0-vm` | Full, systemd as PID 1, and bb as an enabled service, without sudo |
 | VM with sudo | `edge-vm-sudo`, `0.44.0-vm-sudo`, `img-0.4.0-vm-sudo` | VM plus passwordless guest sudo |
-| exe.dev | `edge-exedev`, `0.44.0-exedev`, `img-0.4.0-exedev` | VM plus SSH and exe.dev integration, with bb on port 3000 |
+| exe.dev | `edge-exedev`, `0.44.0-exedev`, `img-0.4.0-exedev` | VM plus exe.dev integration; guest SSH is disabled pending access validation |
 
-Full keeps unsuffixed tags. `latest` and `slim` are moving aliases; sudo, VM, and exe.dev flavors have no bare moving aliases. Sudo is opt-in and operates inside the rootless container or isolated VM guest. Container sudo requires dropping `no-new-privileges`; VM images require smolvm's default VM-grade workload profile rather than `--unprivileged`. The `exedev` flavor is for [exe.dev](https://exe.dev/docs/customization) and uses its own SSH/runtime integration. See [running and security options](docs/running.md), [running as a microVM](docs/smolvm.md), and [tag policy](docs/publishing.md).
+Full keeps unsuffixed tags. `latest` and `slim` are moving aliases; sudo, VM, and exe.dev flavors have no bare moving aliases. Sudo is opt-in and operates inside the rootless container or isolated VM guest. Container sudo requires dropping `no-new-privileges`; VM images require smolvm's default VM-grade workload profile rather than `--unprivileged`. The `exedev` flavor is for [exe.dev](https://exe.dev/docs/customization); it keeps guest SSH disabled and does not set the default proxy port until exe.dev access is verified. See [running and security options](docs/running.md), [running as a microVM](docs/smolvm.md), and [tag policy](docs/publishing.md).
 
 ## Run it as a container
 
@@ -40,7 +40,7 @@ Use `make ci FLAVOR=slim TAG=slim` to build and check another flavor. For direct
 - [Developing bb](docs/developing-bb.md): build and run bb from a checkout using `full-sudo`.
 - [Running as a microVM](docs/smolvm.md): the systemd-based `vm` flavor and [smolvm](https://smolmachines.com) examples.
 - [Worker image prototype](docs/workers.md): local, unpublished BB-free targets for manually enrolled execution machines.
-- [Running on exe.dev](docs/exedev.md): the SSH-enabled `exedev` flavor and exe.dev setup.
+- [Running on exe.dev](docs/exedev.md): the `exedev` flavor and its pending SSH/proxy integration checks.
 - [Publishing](docs/publishing.md): tags, release workflow, and architecture support.
 - [Changelog](CHANGELOG.md): changes to the image itself.
 

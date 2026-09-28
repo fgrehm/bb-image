@@ -2,16 +2,11 @@ IMAGE ?= bb
 TAG ?= dev
 ENGINE ?= podman
 
-# Containerfile stage to build, passed as --target. Defaults to the flavor so
-# that `make build FLAVOR=slim` builds what `make check FLAVOR=slim` checks.
-# Empty builds the final release stage, the full image behind today's
-# unsuffixed tags.
-TARGET ?= $(FLAVOR)
+# Build the chosen flavor from its Containerfile and its parent images.
 FLAVOR ?= full
 
-# Read from the Containerfile so a release tag states the bb version without it
-# having to be repeated on the command line.
-BB_VERSION := $(shell sed -n 's/^ARG BB_VERSION=\(.*\)/\1/p' container/Containerfile)
+# Read from the shared parent so a release tag states the baked bb version.
+BB_VERSION := $(shell sed -n 's/^ARG BB_VERSION=\(.*\)/\1/p' container/Containerfile.foundation)
 
 # Host port for the bb server. Override when something else already owns 38886,
 # e.g. `make run BB_PORT=39886`.
@@ -79,10 +74,8 @@ endif
 # Only `build` uses this; `run` and `hack` do not build.
 GH_TOKEN ?= $(or $(GITHUB_TOKEN),$(shell gh auth token 2>/dev/null))
 export GH_TOKEN
-# The value holds commas, so it stays out of the $(if) call itself: make splits the
-# then-branch on them otherwise, which silently truncates the flag.
-GH_TOKEN_SECRET = --secret id=github_token,type=env,env=GH_TOKEN
-BUILD_SECRET = $(if $(GH_TOKEN),$(GH_TOKEN_SECRET))
+# build/build.sh passes the token as an environment-backed build secret, never
+# as a build argument or a value on a command line.
 
 # Extra flags, e.g. RUN_ARGS='-v ~/src:/home/developer/src:Z'
 RUN_ARGS ?=
@@ -90,7 +83,8 @@ RUN_ARGS ?=
 .PHONY: build check ci check-smolvm-systemd fonts-regen hack run release
 
 build:
-	$(ENGINE) build -f container/Containerfile $(if $(TARGET),--target $(TARGET)) -t $(IMAGE):$(TAG) $(BUILD_SECRET) .
+	@test -z "$(TARGET)" || { echo "TARGET is no longer supported; use FLAVOR=$(FLAVOR) or set FLAVOR=<variant>" >&2; exit 1; }
+	IMAGE=$(IMAGE) TAG=$(TAG) ENGINE=$(ENGINE) FLAVOR=$(FLAVOR) sh build/build.sh
 
 # All verification now lives here, run against the built image: behavioural
 # checks (launch smoke, fontconfig override, first-use install, home size) in

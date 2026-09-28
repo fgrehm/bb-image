@@ -1,0 +1,108 @@
+# ---------------------------------------------------------------------------
+# slim: the small extensible bb runtime. Node, packaged bb, lazy pnpm and the
+# coding-agent CLIs through mise, the entrypoint, and the hydration machinery.
+# Explicitly not here: Chromium and Playwright, the build toolchain, database
+# clients, media and document tools, the baked dev tools, the backup tooling,
+# and sudo. The node and bb layers are built again in this stage rather than
+# shared with full: cache keys follow the parent chain, and full installs its
+# package tier between foundation and node, so the instructions cannot be
+# identical ones. Editing this block rebuilds only slim's layers.
+# ---------------------------------------------------------------------------
+
+ARG BASE_IMAGE=localhost/bb-stage-foundation:dev
+FROM ${BASE_IMAGE} AS slim
+
+ARG USERNAME
+ARG BUILD_SCRATCH
+ARG BB_VERSION
+
+# node, installed from the bootstrap config foundation wrote. Same recipe as the
+# full stage; the secret-mount details are documented there.
+RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=0400 \
+    if [ -s /run/secrets/github_token ]; then \
+      export MISE_GITHUB_TOKEN="$(cat /run/secrets/github_token)"; \
+    fi; \
+    export npm_config_cache="$BUILD_SCRATCH/npm" \
+           XDG_CACHE_HOME="$BUILD_SCRATCH/cache" \
+           XDG_STATE_HOME="$BUILD_SCRATCH/state"; \
+    mise install \
+    && mise reshim --force \
+    && rm -rf "$BUILD_SCRATCH"
+
+# bb, with the same npm arguments full uses; native addons are compiled or
+# fetched at install time either way.
+RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=0400 \
+    if [ -s /run/secrets/github_token ]; then \
+      export MISE_GITHUB_TOKEN="$(cat /run/secrets/github_token)"; \
+    fi; \
+    export npm_config_cache="$BUILD_SCRATCH/npm" \
+           XDG_CACHE_HOME="$BUILD_SCRATCH/cache" \
+           XDG_STATE_HOME="$BUILD_SCRATCH/state"; \
+    npm install -g \
+        --allow-scripts=@parcel/watcher,better-sqlite3,node-pty \
+        "bb-app@${BB_VERSION}" \
+    && mise reshim --force \
+    && rm -rf "$BUILD_SCRATCH"
+
+# The slim toolset, overwriting the bootstrap config. Owned by the user so that
+# `mise use -g` keeps working.
+COPY --chown=$USERNAME:$USERNAME container/mise-slim.toml /opt/mise/config.toml
+
+# Reconcile the shim farm for the slim toolset. Nothing is downloaded here, and
+# the rm guard matches the full stage: build residue must not reach $HOME; a
+# cache committed to a layer survives a later delete.
+RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=0400 \
+    set -e; \
+    if [ -s /run/secrets/github_token ]; then \
+      export MISE_GITHUB_TOKEN="$(cat /run/secrets/github_token)"; \
+    fi; \
+    export npm_config_cache="$BUILD_SCRATCH/npm" \
+           XDG_CACHE_HOME="$BUILD_SCRATCH/cache" \
+           XDG_STATE_HOME="$BUILD_SCRATCH/state"; \
+    mise install; \
+    mise reshim --force; \
+    rm -rf "$BUILD_SCRATCH" "/home/${USERNAME}/.cache" "/home/${USERNAME}/.local" \
+    && install -d -o "$USERNAME" -g "$USERNAME" \
+        "/home/${USERNAME}/.cache" "/home/${USERNAME}/.local"
+
+# No browsers in slim, so no fontconfig override; the fontconfig story lives in
+# the full image. LANG still matters here: agents print non-ASCII.
+ENV LANG=C.UTF-8
+
+# ~/.bb holds server state. It is created in the image so the copy-up into a home
+# volume carries the right uid/gid: a volume created empty would be root-owned
+# and bb could not write to it.
+RUN mkdir -p /home/${USERNAME}/.bb
+
+COPY --chown=$USERNAME:$USERNAME container/entrypoint.sh /home/${USERNAME}/entrypoint.sh
+
+# The hydration registry is stamped by developer with an atomic rename, so its
+# directory, not just the files copied into it, must be developer-owned.
+USER root
+RUN install -d -o "$USERNAME" -g "$USERNAME" /usr/local/share/bb
+USER $USERNAME
+
+# Home hydration. The same registry chain ships to every variant: the shared
+# guidance keeps the wording flavor-neutral, so a volume that moved from one
+# flavor to another is hydrated by hash as if the image itself moved on. The
+# registry and pristine sources live under /usr/local/share/bb, outside the
+# volume, and the entrypoint hydrates them on every start
+# (container/hydrate-home.sh). Copies a user edited are left alone.
+#
+# This block sits last so that editing a managed source rebuilds only these
+# layers. Above the toolset COPY, an AGENTS.md edit would invalidate the mise
+# toolset layers and re-download the baked dev tools.
+COPY --chown=$USERNAME:$USERNAME container/agents.md container/rc-bash.sh \
+    container/rc-zsh.sh container/managed.tsv container/managed-prev.tsv \
+    container/hydrate-home.sh /usr/local/share/bb/
+
+RUN bash /usr/local/share/bb/hydrate-home.sh stamp \
+    && HOME=/home/${USERNAME} bash /usr/local/share/bb/hydrate-home.sh install
+
+CMD ["bash", "/home/developer/entrypoint.sh"]
+
+# Identity marker: the check harness refuses to run this image's checks as
+# another flavor, so a slim build can never pass because it was verified as
+# full, and vice versa. sudo stages stamp their own flavor over the one they
+# inherit.
+LABEL sh.bb.flavor="slim"

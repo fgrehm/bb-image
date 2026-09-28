@@ -1,0 +1,140 @@
+# Pinned to the linux/amd64 manifest digest for Debian 13 (trixie).
+# Select the amd64 child digest with: podman manifest inspect docker.io/library/debian:13 | jq -r '.manifests[] | select(.platform.os == "linux" and .platform.architecture == "amd64") | .digest'.
+#
+# Version pins live here; build/build.sh passes them to dependent builds.
+# Keep each pin on one line for the Makefile, checks, and release workflow.
+#
+# Scoped to the build rather than ENV, so it does not leak into the final image.
+ARG DEBIAN_FRONTEND=noninteractive
+ARG USERNAME=developer
+ARG USER_UID=1000
+ARG USER_GID=1000
+ARG MISE_VERSION=2026.9.14
+ARG BB_NODE_VERSION=24.21.0
+ARG BB_VERSION=0.44.0
+ARG PLAYWRIGHT_VERSION=1.63.0
+# A scratch dir every downloading RUN points its caches at and deletes before it
+# ends, ARG rather than ENV so none of it lands in the runtime environment; the
+# details are documented at first use in the full stage.
+ARG BUILD_SCRATCH=/tmp/build-scratch
+
+# ---------------------------------------------------------------------------
+# foundation: everything every variant in this family starts from. The distro
+# pinned above, the unprivileged user, mise with its data outside home, and the
+# packages every image carries (see container/packages-foundation.txt). It has
+# no packaged bb, no server command and no variant-specific toolset; it is
+# internal and never published. Other Containerfiles build FROM its local tag.
+# ---------------------------------------------------------------------------
+
+FROM docker.io/library/debian@sha256:d5ce19d4736f0ebbacd686d1040271a5aeb0cc920f5990c1bfae1717627f0674 AS foundation
+
+ARG DEBIAN_FRONTEND
+ARG USERNAME
+ARG USER_UID
+ARG USER_GID
+ARG MISE_VERSION
+ARG BB_NODE_VERSION
+
+# The package list is a file so the inventory is diffable and reviewable on its
+# own; the file carries the rationale comments. It is copied into /tmp and
+# deleted in the same RUN, so nothing survives into a layer.
+COPY container/packages-foundation.txt /tmp/packages-foundation.txt
+RUN apt-get update \
+    && grep -vE '^(\s*(#.*)?)$' /tmp/packages-foundation.txt \
+       | xargs apt-get install -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/* /tmp/packages-foundation.txt
+
+RUN groupadd --gid $USER_GID $USERNAME \
+    && useradd --uid $USER_UID --gid $USER_GID -m -s /bin/bash $USERNAME
+
+# mise, its toolchains, and the toolset all live outside the user's home.
+#
+# Home is volume-backed at runtime, and a named volume is seeded from the image
+# exactly once. Anything the image owns under home would therefore freeze at
+# first boot and shadow later image updates. Keeping the toolchain out of home
+# means the baked tools stay in step with the image instead of drifting inside
+# a volume, and it keeps the first-boot copy into that volume small.
+
+# The installer verifies the release checksum. Pinning MISE_VERSION keeps the
+# build reproducible and selects the checksum from that release's SHASUMS256.txt.
+RUN curl -fsSL https://mise.run \
+    | MISE_INSTALL_PATH=/usr/local/bin/mise MISE_VERSION="v${MISE_VERSION}" sh
+
+# MISE_DATA_DIR holds installed toolchains and the shim farm, and
+# MISE_GLOBAL_CONFIG_FILE points the toolset outside home. Both are deliberately
+# not volume-backed: what the image bakes stays current, and anything installed at
+# runtime is per-container. /usr/local/bin, where the binary went, is on the
+# default PATH.
+#
+# The toolset has to be the *global* config rather than the system config at
+# /etc/mise, even though the latter reads just as well. mise only creates
+# bootstrap shims for tools it picks up from the user or project scope, so the
+# same file under /etc/mise yields shims for installed tools only: node and bb
+# get one, every lazy tool silently does not, and first-use installation stops
+# working because there is no shim to invoke. It is writable by the user so
+# `mise use -g` works, though such changes live and die with the container.
+ENV MISE_DATA_DIR=/opt/mise \
+    MISE_GLOBAL_CONFIG_FILE=/opt/mise/config.toml \
+    PATH="/opt/mise/shims:$PATH"
+
+# Shared runtime cache paths, available to every variant and every exec context.
+# The default-home ENVs are complemented by `${HOME}`-relative [env] entries in
+# each variant's mise config so mise-managed commands remain correct when a
+# derived image renames the user. Such images should redeclare these ENVs too if
+# raw execs need renamed-home paths.
+ENV TMPDIR=/tmp \
+    npm_config_cache=/home/developer/.cache/npm \
+    pnpm_config_store_dir=/home/developer/.cache/pnpm-store \
+    npm_config_store_dir=/home/developer/.cache/pnpm-store \
+    CARGO_HOME=/home/developer/.cargo \
+    GOPATH=/home/developer/go \
+    GOMODCACHE=/home/developer/go/pkg/mod \
+    GOCACHE=/home/developer/.cache/go-build \
+    UV_CACHE_DIR=/home/developer/.cache/uv
+
+# No cache location is pinned here, on purpose. A cache is the one thing a volume is
+# the right home for, so with nothing set, runtime npm writes to ~/.npm and mise to
+# ~/.cache/mise, both inside the home volume, where they survive a recreate. Pinning
+# them to /opt made every runtime cache per-container and baked 165MB of build-time
+# cache into the image to no purpose.
+#
+# Build-time caches are the harder half, because a layer is a stack and a delete in a
+# later layer is only a whiteout: bytes written in one layer still count toward the
+# size after a later layer removes them. Verified with a throwaway 200MB layer, where
+# the same delete in a separate RUN left the image at 277MB rather than 77MB. So every
+# RUN that downloads points these at $BUILD_SCRATCH and removes it before the RUN
+# ends, and the bytes never reach a layer. ARG rather than ENV so none of it lands in
+# the runtime environment.
+
+# A bootstrap config holding only node. The real toolset is copied in further
+# down in the full stage, after the expensive layers, so editing it does not
+# invalidate them; the variants that branch off foundation replace this file in
+# their own way. node is installed from an explicit version rather than read
+# out of a toolset file, so the version is named twice, once at the top and
+# once in mise.toml, because a layer cannot both install node and depend on the
+# file that declares it. check.sh (make check) fails a release if the two drift
+# apart.
+RUN mkdir -p /opt/mise \
+    && printf '[tools]\nnode = "%s"\n' "${BB_NODE_VERSION}" > /opt/mise/config.toml \
+    && chown -R $USERNAME:$USERNAME /opt/mise
+
+# Debian's /etc/profile resets PATH outright, which drops the mise shims, so a login
+# shell (`bash -l`, ssh, or anything bb spawns through one) loses every lazy tool and
+# they all become "command not found". Image-owned, so unlike ~/.bashrc this is not
+# frozen into the home volume and can still be fixed after a volume exists.
+RUN set -e; \
+    printf '%s\n' \
+      '# Debian /etc/profile resets PATH, which drops the mise shims. Put them back.' \
+      'case ":$PATH:" in' \
+      '  *:/opt/mise/shims:*) ;;' \
+      '  *) PATH="/opt/mise/shims:$PATH" ;;' \
+      'esac' \
+      'export PATH' \
+      > /etc/profile.d/mise-shims.sh \
+    && chmod 0644 /etc/profile.d/mise-shims.sh
+
+USER $USERNAME
+
+# bb hosts many projects and resolves them by path, so home is the sane default
+# rather than a single mount point. Mount a tree under it (see the Makefile).
+WORKDIR /home/${USERNAME}

@@ -6,8 +6,8 @@
 
 # The repo's Containerfile and mise.toml have to agree on the node version; the
 # duplication is what keeps a toolset edit from rebuilding the node and bb layers.
-say "node version agrees between container/Containerfile and mise.toml"
-node_arg="$(sed -n 's/^ARG NODE_VERSION=\(.*\)$/\1/p' "$root/container/Containerfile")"
+say "node version agrees between container/Containerfile.foundation and mise.toml"
+node_arg="$(sed -n 's/^ARG BB_NODE_VERSION=\(.*\)$/\1/p' "$root/container/Containerfile.foundation")"
 node_toml="$(sed -n 's/^node = "\(.*\)"$/\1/p' "$root/mise.toml")"
 [ "$node_arg" = "$node_toml" ] ||
 	{

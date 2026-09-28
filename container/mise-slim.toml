@@ -5,7 +5,7 @@
 # The full image's toolset stays in the root mise.toml; slim checks fail if this
 # config grows tools outside its smaller contract.
 #
-# NOTE: node's version is duplicated as NODE_VERSION at the top of the
+# NOTE: node's version is duplicated as BB_NODE_VERSION at the top of the
 # Containerfile. The bootstrap config that installs node is written before this
 # file is copied over it; the build asserts the two agree and fails on drift.
 

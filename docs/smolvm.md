@@ -30,7 +30,7 @@ make check-smolvm-systemd FLAVOR=vm TAG=vm
 make ci FLAVOR=vm-sudo TAG=vm-sudo
 make check-smolvm-systemd FLAVOR=vm-sudo TAG=vm-sudo
 
-# The exe.dev adapter uses the same systemd smoke gate, with SSH and port 3000.
+# The exe.dev adapter uses the same systemd smoke gate and checks bb on port 3000.
 make ci FLAVOR=exedev TAG=exedev
 make check-smolvm-systemd FLAVOR=exedev TAG=exedev
 ```
@@ -71,6 +71,6 @@ The published image is currently `linux/amd64` only. Matching the guest is autom
 
 Bubblewrap works fully inside the microVM, including a fresh `/proc` mount with PID-namespace unsharing. The corresponding failure inside a nested rootless container is a container limitation and does not apply to the VM guest.
 
-The `exedev` flavor is for exe.dev rather than smolvm. It adds SSH, exe.dev's init wrapper, and the bb port expected by exe.dev's HTTPS proxy; see [Running on exe.dev](exedev.md).
+The `exedev` flavor is for exe.dev rather than smolvm. It adds exe.dev's init wrapper and bb's port-3000 service; guest SSH stays disabled pending verification of exe.dev-provided access. See [Running on exe.dev](exedev.md).
 
 The older [`examples/smolvm/Smolfile`](../examples/smolvm/Smolfile) remains an example of booting the ordinary full container image directly, with `entrypoint.sh` as workload PID 1. Prefer the `vm` flavor when you want an init system, managed services, or future VM-native timers and worker enrollment.

@@ -5,19 +5,19 @@
 # check-flavors: worker worker-vm
 
 say "worker has Node and agent shims, but no baked BB or enrollment"
-node_arg="$(sed -n 's/^ARG NODE_VERSION=\(.*\)$/\1/p' "$root/container/Containerfile")"
+node_arg="$(sed -n 's/^ARG BB_NODE_VERSION=\(.*\)$/\1/p' "$root/container/Containerfile.foundation")"
 slim_node="$(sed -n 's/^node = "\(.*\)"$/\1/p' "$root/container/mise-slim.toml")"
 [ "$node_arg" = "$slim_node" ] || {
 	echo "node mismatch: Containerfile says '$node_arg', mise-slim.toml says '$slim_node'" >&2
 	exit 1
 }
-crun --env NODE_VERSION="$node_arg" <<'SH'
+crun --env BB_NODE_VERSION="$node_arg" <<'SH'
 set -eu
 [ "$(id -u)" = "$( [ "$FLAVOR" = worker ] && id -u developer || echo 0 )" ] || {
 	echo "unexpected worker image user" >&2
 	exit 1
 }
-[ "$(node --version)" = "v$NODE_VERSION" ]
+[ "$(node --version)" = "v$BB_NODE_VERSION" ]
 command -v npm >/dev/null
 for c in claude codex pi opencode pnpm; do command -v "$c" >/dev/null; done
 for c in bb bb-app sudo; do

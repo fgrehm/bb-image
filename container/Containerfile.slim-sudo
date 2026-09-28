@@ -1,0 +1,30 @@
+# ---------------------------------------------------------------------------
+# slim-sudo: everything in slim, plus passwordless sudo, so an agent can add
+# apt packages, system users or anything else an interactive environment
+# assembly needs. Launching it is a deliberate security step down: passwordless
+# sudo means setuid works, so the container must be started WITHOUT
+# --security-opt no-new-privileges (the Makefile derives that flag from the
+# flavor). Host access stays bounded by the rootless container itself.
+# ---------------------------------------------------------------------------
+
+ARG BASE_IMAGE=localhost/bb-stage-slim:dev
+FROM ${BASE_IMAGE} AS slim-sudo
+
+ARG USERNAME
+
+USER root
+RUN set -e; \
+    apt-get update \
+    && apt-get install -y --no-install-recommends sudo \
+    && rm -rf /var/lib/apt/lists/*
+COPY --chmod=0440 container/sudoers-developer /etc/sudoers.d/developer
+USER $USERNAME
+
+# Same default command as the flavor below it; only the launch policy differs.
+CMD ["bash", "/home/developer/entrypoint.sh"]
+
+# Identity marker: the check harness refuses to run this image's checks as
+# another flavor, so a slim build can never pass because it was verified as
+# full, and vice versa. sudo stages stamp their own flavor over the one they
+# inherit.
+LABEL sh.bb.flavor="slim-sudo"

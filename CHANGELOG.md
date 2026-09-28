@@ -6,6 +6,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- Refresh the pinned Debian 13 base to the current linux/amd64 image manifest.
+- Keep SSH tooling in `exedev` but disable its guest SSH service and socket while checking exe.dev-provided access. Remove the `EXPOSE 3000` declaration so exe.dev does not automatically select bb as the root HTTP proxy target, and remove the login-user label pending a live VM check. The proxy can be configured explicitly and remains private by default; `EXPOSE` selects the target but is not a firewall.
+
 ### Fixed
 
 - Add `bb-backup state` to discover and snapshot bb and plugin SQLite state, include plugin data and documented trace roots, and exclude credentials and managed source/cache files; preserve explicit `backup` selection for custom layouts.

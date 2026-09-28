@@ -1,0 +1,34 @@
+# ---------------------------------------------------------------------------
+# exedev: the exe.dev-specific VM. It keeps the vm software and systemd
+# contract, installs SSH tooling but leaves its guest service disabled while
+# verifying exe.dev-provided SSH access. bb listens on port 3000; without an
+# EXPOSE declaration the operator must configure the proxy target explicitly.
+# ---------------------------------------------------------------------------
+
+ARG BASE_IMAGE=localhost/bb-stage-vm:dev
+FROM ${BASE_IMAGE} AS exedev
+
+USER root
+COPY container/packages-exedev.txt /tmp/packages-exedev.txt
+RUN set -e; \
+    apt-get update \
+    && grep -vE '^(\s*(#.*)?)$' /tmp/packages-exedev.txt \
+        | xargs apt-get install -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/* /tmp/packages-exedev.txt \
+    && rm -f /etc/ssh/ssh_host_*_key /etc/ssh/ssh_host_*_key.pub
+
+COPY --chmod=0755 container/exedev-init.sh /usr/local/bin/init
+COPY --chmod=0644 container/exedev-bb.service /etc/systemd/system/bb.service
+RUN set -e; \
+    systemctl enable bb.service \
+    && systemctl disable ssh.service \
+    && if [ -e /usr/lib/systemd/system/ssh.socket ]; then systemctl disable ssh.socket; fi \
+    && mkdir -p /var/lib/systemd/linger/developer \
+    && touch /var/lib/systemd/linger/developer
+
+# Linger starts developer's user manager at boot and keeps it alive without a
+# login; retain this while checking exe.dev's user-session contract.
+# systemd uses SIGRTMIN+3 for an orderly shutdown when the VM runtime stops it.
+STOPSIGNAL SIGRTMIN+3
+CMD ["/usr/local/bin/init"]
+LABEL sh.bb.flavor="exedev"

@@ -38,7 +38,7 @@ UV_CACHE_DIR = "{{ env.HOME }}/.cache/uv"
 [tools]
 # Installed at image build time. This is all bb itself needs to run.
 #
-# NOTE: node's version is duplicated as NODE_VERSION in the Containerfile, and the
+# NOTE: node's version is duplicated as BB_NODE_VERSION in the Containerfile, and the
 # two have to stay in sync. The layer that installs node sits above the COPY of
 # this file, because a layer cannot both install node and depend on the file that
 # declares it. That separation is what stops a toolset edit from re-downloading

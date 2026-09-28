@@ -9,16 +9,16 @@
 # the released image is only known by comparing what it starts with against what
 # the recipe pinned.
 say "baked versions match the Containerfile (bb, node, playwright)"
-bb_arg="$(sed -n 's/^ARG BB_VERSION=\(.*\)$/\1/p' "$root/container/Containerfile")"
-node_arg="$(sed -n 's/^ARG NODE_VERSION=\(.*\)$/\1/p' "$root/container/Containerfile")"
-pw_arg="$(sed -n 's/^ARG PLAYWRIGHT_VERSION=\(.*\)$/\1/p' "$root/container/Containerfile")"
-crun --env BB_VERSION="$bb_arg" --env NODE_VERSION="$node_arg" --env PLAYWRIGHT_VERSION="$pw_arg" <<'SH'
+bb_arg="$(sed -n 's/^ARG BB_VERSION=\(.*\)$/\1/p' "$root/container/Containerfile.foundation")"
+node_arg="$(sed -n 's/^ARG BB_NODE_VERSION=\(.*\)$/\1/p' "$root/container/Containerfile.foundation")"
+pw_arg="$(sed -n 's/^ARG PLAYWRIGHT_VERSION=\(.*\)$/\1/p' "$root/container/Containerfile.foundation")"
+crun --env BB_VERSION="$bb_arg" --env BB_NODE_VERSION="$node_arg" --env PLAYWRIGHT_VERSION="$pw_arg" <<'SH'
 set -eu
 [ "$(bb --version)" = "$BB_VERSION" ] ||
 	{ echo "bb version is $(bb --version), expected $BB_VERSION" >&2; exit 1; }
-[ "$(node --version)" = "v$NODE_VERSION" ] ||
-	{ echo "node version is $(node --version), expected v$NODE_VERSION" >&2; exit 1; }
+[ "$(node --version)" = "v$BB_NODE_VERSION" ] ||
+	{ echo "node version is $(node --version), expected v$BB_NODE_VERSION" >&2; exit 1; }
 [ "$(playwright --version 2>/dev/null | grep -oE 'Version [0-9.]+' | cut -d' ' -f2)" = "$PLAYWRIGHT_VERSION" ] ||
 	{ echo "playwright $(playwright --version), expected $PLAYWRIGHT_VERSION" >&2; exit 1; }
-echo "bb $BB_VERSION, node v$NODE_VERSION, playwright $PLAYWRIGHT_VERSION, all matching"
+echo "bb $BB_VERSION, node v$BB_NODE_VERSION, playwright $PLAYWRIGHT_VERSION, all matching"
 SH

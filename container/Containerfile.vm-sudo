@@ -1,0 +1,17 @@
+# ---------------------------------------------------------------------------
+# vm-sudo: the same systemd VM contract with passwordless guest sudo. This is
+# explicit rather than part of vm, matching the container variants' opt-in
+# elevation policy.
+# ---------------------------------------------------------------------------
+
+ARG BASE_IMAGE=localhost/bb-stage-vm:dev
+FROM ${BASE_IMAGE} AS vm-sudo
+
+RUN set -e; \
+    apt-get update \
+    && apt-get install -y --no-install-recommends sudo \
+    && rm -rf /var/lib/apt/lists/*
+COPY --chmod=0440 container/sudoers-developer /etc/sudoers.d/developer
+
+CMD ["/sbin/init"]
+LABEL sh.bb.flavor="vm-sudo"

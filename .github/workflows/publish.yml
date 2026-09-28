@@ -93,7 +93,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          read_arg() { sed -n "s/^ARG $1=\(.*\)/\1/p" container/Containerfile; }
+          read_arg() { sed -n "s/^ARG $1=\(.*\)/\1/p" container/Containerfile.foundation; }
 
           bb="$(read_arg BB_VERSION)"
           if [ -z "$bb" ]; then
@@ -105,8 +105,9 @@ jobs:
             echo "BB_VERSION=$bb"
             echo "BB_MINOR=${bb%.*}"
             echo "IMAGE_VERSION=${GITHUB_REF_NAME#v}"
-            echo "NODE_VERSION=$(read_arg NODE_VERSION)"
+            echo "BB_NODE_VERSION=$(read_arg BB_NODE_VERSION)"
             echo "MISE_VERSION=$(read_arg MISE_VERSION)"
+            echo "PLAYWRIGHT_VERSION=$(read_arg PLAYWRIGHT_VERSION)"
           } >> "$GITHUB_ENV"
 
           echo "bb ${bb}, image ${GITHUB_REF_NAME#v}, flavor ${{ matrix.flavor }}"
@@ -138,41 +139,34 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref_type == 'tag' && matrix.flavor == 'full' && !contains(github.ref_name, '-') }}
             type=raw,value=slim,enable=${{ github.ref_type == 'tag' && matrix.flavor == 'slim' && !contains(github.ref_name, '-') }}
 
-      # Build without pushing first, so the verification step below can run
-      # against the image it will gate. The push step re-runs the build against
-      # the same builder instance, where the layer cache from this step is still
-      # warm, so the second pass is cheap.
+      # Bake gives each Containerfile its parent as a named target context.
+      # Only the selected flavor is loaded or pushed; internal parents stay in
+      # the builder. Keep tags and labels in one override file for both passes.
+      - name: Prepare Bake metadata
+        shell: bash
+        env:
+          META_JSON: ${{ steps.meta.outputs.json }}
+        run: |
+          jq --arg flavor '${{ matrix.flavor }}' \
+            '{target: {($flavor): {tags: .tags, labels: .labels}}}' \
+            <<< "$META_JSON" > docker-bake.meta.json
+
       - name: Build image
-        uses: docker/build-push-action@v7
+        uses: docker/bake-action@v7
         with:
-          context: .
-          # Not Dockerfile. buildx does not auto-detect Containerfile the way
-          # podman does, so this has to be set explicitly.
-          file: container/Containerfile
-          # One matrix flavor per target; the stages share the foundation layers,
-          # so a warm cache carries over between matrix jobs.
-          target: ${{ matrix.flavor }}
-          platforms: ${{ env.PLATFORMS }}
-          # Same labels as the push build: otherwise labels would change the
-          # image config digest between verify and push, and the verified
-          # artifact would not be the published one even on a full cache hit.
-          labels: ${{ steps.meta.outputs.labels }}
-          # Loaded into the local docker store so build/check.sh can run it.
-          # One staging tag per flavor: buildx does not reliably export multiple
-          # tags with load, and this one never leaves the runner.
-          push: false
-          load: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:staged-${{ matrix.flavor }}
-          build-args: |
-            BB_VERSION=${{ env.BB_VERSION }}
-          # Authenticates mise's GitHub API calls, which otherwise run unauthenticated at
-          # 60 requests per hour and fail attestation verification intermittently. The
-          # Containerfile mounts this as a BuildKit secret and never writes it to a layer;
-          # the final RUN fails the build if it turns up on disk anywhere.
-          secrets: |
-            github_token=${{ secrets.GITHUB_TOKEN }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          source: .
+          files: |
+            ./docker-bake.hcl
+            ./docker-bake.meta.json
+          targets: ${{ matrix.flavor }}
+          set: |
+            ${{ matrix.flavor }}.tags=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:staged-${{ matrix.flavor }}
+            ${{ matrix.flavor }}.output=type=docker
+            *.platform=${{ env.PLATFORMS }}
+            *.cache-from=type=gha
+            *.cache-to=type=gha,mode=max
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # Everything verification-shaped lives here: the Containerfile has no
       # assertion RUNs any more. build/check.sh runs the flavor-matching
@@ -245,23 +239,21 @@ jobs:
       # time and cannot diverge.
 
       - name: Build and push
-        uses: docker/build-push-action@v7
+        uses: docker/bake-action@v7
         with:
-          context: .
-          file: container/Containerfile
-          target: ${{ matrix.flavor }}
-          platforms: ${{ env.PLATFORMS }}
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            BB_VERSION=${{ env.BB_VERSION }}
-          secrets: |
-            github_token=${{ secrets.GITHUB_TOKEN }}
-          cache-from: type=gha
-          # Not type=gha,mode=max here; that was done in the build step above.
+          source: .
+          files: |
+            ./docker-bake.hcl
+            ./docker-bake.meta.json
+          targets: ${{ matrix.flavor }}
+          set: |
+            ${{ matrix.flavor }}.output=type=registry
+            *.platform=${{ env.PLATFORMS }}
+            *.cache-from=type=gha
           provenance: true
           sbom: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # States the bb move explicitly, since that is what users actually care
   # about and a git tag cannot express it. Depends on every publish job, so no
@@ -283,7 +275,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          bb="$(sed -n 's/^ARG BB_VERSION=\(.*\)/\1/p' container/Containerfile)"
+          bb="$(sed -n 's/^ARG BB_VERSION=\(.*\)/\1/p' container/Containerfile.foundation)"
           [ -n "$bb" ] || { echo "could not read BB_VERSION from the Containerfile" >&2; exit 1; }
           {
             echo "BB_VERSION=$bb"
@@ -342,9 +334,10 @@ jobs:
           prev="$(git tag --list 'v*' --sort=-v:refname | grep -vx "$tag" | grep -v -- '-' | head -n1 || true)"
           prev_bb=""
           if [ -n "$prev" ]; then
-            # Tags older than the layout move carry the Containerfile at the
-            # repository root, so look up both paths and take whichever exists.
-            prev_bb="$({ git show "${prev}:container/Containerfile" 2>/dev/null \
+            # Earlier releases used one container/Containerfile, and the oldest
+            # ones kept it at the repository root. Read the first path present.
+            prev_bb="$({ git show "${prev}:container/Containerfile.foundation" 2>/dev/null \
+                  || git show "${prev}:container/Containerfile" 2>/dev/null \
                   || git show "${prev}:Containerfile"; } \
                   | sed -n 's/^ARG BB_VERSION=\\(.*\\)/\\1/p')"
           fi
