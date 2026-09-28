@@ -1,11 +1,9 @@
-# The slim image's toolset, installed as the global mise config at
-# /opt/mise/config.toml. Inherited from the foundation stage; editing this file
-# rebuilds only slim's toolset layer.
-#
-# node and bb run baked; everything else is lazy and installs on first use.
-# The full image's toolset stays in the root mise.toml; this file deliberately
-# carries the smaller slim contract, and the slim checks fail if it grows
-# tools outside it.
+# Shared slim and worker toolset, installed as the global mise config at
+# /opt/mise/config.toml. Both stages branch from foundation. Node is baked;
+# everything else is lazy and installs on first use. Slim also bakes bb, while
+# workers acquire a private host-only bb-app during manual enrollment.
+# The full image's toolset stays in the root mise.toml; slim checks fail if this
+# config grows tools outside its smaller contract.
 #
 # NOTE: node's version is duplicated as NODE_VERSION at the top of the
 # Containerfile. The bootstrap config that installs node is written before this
@@ -37,7 +35,7 @@ UV_CACHE_DIR = "{{ env.HOME }}/.cache/uv"
 
 [tools]
 
-# Installed at image build time. This is all bb itself needs to run.
+# Installed at image build time. This also satisfies the machine installer.
 node = "24.21.0"
 
 # pnpm is here because agents meet pnpm projects, not because bb uses it. bb detects

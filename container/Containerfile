@@ -651,6 +651,79 @@ LABEL "exe.dev/login-user"="developer"
 LABEL sh.bb.flavor="exedev"
 
 # ---------------------------------------------------------------------------
+# worker: a BB-free execution environment for manual machine enrollment.
+# No server, host daemon, credentials, or startup-time enrollment is baked in.
+# Node and the lazy agent CLIs are enough for the installer to fetch the exact
+# host-only bb-app build from whichever server the operator chooses. Keep this
+# separate from slim: inheriting slim and uninstalling bb would retain its
+# bytes in a lower image layer and shadow the installer's private copy.
+#
+# The container stays alive so the operator can exec the enrollment command.
+# The installer starts an unsupervised daemon in a container without systemd;
+# restarting the container requires an explicit restart of that daemon until
+# a separately validated supervision policy is in place.
+# ---------------------------------------------------------------------------
+
+FROM foundation AS worker
+
+ARG USERNAME
+ARG BUILD_SCRATCH
+
+RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=0400 \
+    if [ -s /run/secrets/github_token ]; then \
+      export MISE_GITHUB_TOKEN="$(cat /run/secrets/github_token)"; \
+    fi; \
+    export npm_config_cache="$BUILD_SCRATCH/npm" \
+           XDG_CACHE_HOME="$BUILD_SCRATCH/cache" \
+           XDG_STATE_HOME="$BUILD_SCRATCH/state"; \
+    mise install \
+    && mise reshim --force \
+    && rm -rf "$BUILD_SCRATCH"
+
+COPY --chown=$USERNAME:$USERNAME container/mise-slim.toml /opt/mise/config.toml
+RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=0400 \
+    set -e; \
+    if [ -s /run/secrets/github_token ]; then \
+      export MISE_GITHUB_TOKEN="$(cat /run/secrets/github_token)"; \
+    fi; \
+    export npm_config_cache="$BUILD_SCRATCH/npm" \
+           XDG_CACHE_HOME="$BUILD_SCRATCH/cache" \
+           XDG_STATE_HOME="$BUILD_SCRATCH/state"; \
+    mise install; \
+    mise reshim --force; \
+    rm -rf "$BUILD_SCRATCH" "/home/${USERNAME}/.cache" "/home/${USERNAME}/.local" \
+    && install -d -o "$USERNAME" -g "$USERNAME" \
+        "/home/${USERNAME}/.cache" "/home/${USERNAME}/.local"
+
+ENV LANG=C.UTF-8
+CMD ["sleep", "infinity"]
+LABEL sh.bb.flavor="worker"
+
+# worker-vm: the same BB-free environment with systemd for manually enrolled
+# machine services. Linger starts the developer user manager at boot, allowing
+# the installer to create its unprivileged user service; it is not enrollment.
+# ---------------------------------------------------------------------------
+
+FROM worker AS worker-vm
+
+USER root
+COPY container/packages-vm-systemd.txt /tmp/packages-vm-systemd.txt
+RUN set -e; \
+    apt-get update \
+    && grep -vE '^(\s*(#.*)?)$' /tmp/packages-vm-systemd.txt \
+        | xargs apt-get install -y --no-install-recommends \
+    && sed -i -E 's/^hosts:.*/hosts: files myhostname dns/' /etc/nsswitch.conf \
+    && rm -rf /var/lib/apt/lists/* /tmp/packages-vm-systemd.txt \
+    && install -d /var/lib/systemd/linger \
+    && touch /var/lib/systemd/linger/developer \
+    && rm -f /etc/machine-id /var/lib/dbus/machine-id \
+    && : > /etc/machine-id
+
+STOPSIGNAL SIGRTMIN+3
+CMD ["/sbin/init"]
+LABEL sh.bb.flavor="worker-vm"
+
+# ---------------------------------------------------------------------------
 # Final alias. Bare builds (no --target) and TARGET=release produce the same
 # artifact: the default full image behind today's unsuffixed tags. A stage with
 # no instructions adds nothing; it exists so that naming a target explicitly

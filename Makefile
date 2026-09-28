@@ -126,7 +126,10 @@ hack:
 
 # Serves bb with the entrypoint in front, so SIGTERM from `podman stop` reaches
 # bb and it exits cleanly. Logs are tailed to the terminal by the entrypoint.
+# Worker flavors have no server and must not inherit the bb-home volume or the
+# port publish; see docs/workers.md for the manual run and enrollment flow.
 run:
+	@case "$(FLAVOR)" in worker|worker-vm) echo "make run serves bb; see docs/workers.md for worker setup" >&2; exit 1;; esac
 	$(ENGINE) run --rm \
 		--name $(NAME) \
 		$(USERNS) \

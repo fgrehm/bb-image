@@ -39,6 +39,7 @@ Use `make ci FLAVOR=slim TAG=slim` to build and check another flavor. For direct
 - [Using this image as a base](docs/derived-images.md): ownership, tool installs, cache paths, and entrypoint contracts.
 - [Developing bb](docs/developing-bb.md): build and run bb from a checkout using `full-sudo`.
 - [Running as a microVM](docs/smolvm.md): the systemd-based `vm` flavor and [smolvm](https://smolmachines.com) examples.
+- [Worker image prototype](docs/workers.md): local, unpublished BB-free targets for manually enrolled execution machines.
 - [Running on exe.dev](docs/exedev.md): the SSH-enabled `exedev` flavor and exe.dev setup.
 - [Publishing](docs/publishing.md): tags, release workflow, and architecture support.
 - [Changelog](CHANGELOG.md): changes to the image itself.
