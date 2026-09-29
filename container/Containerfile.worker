@@ -48,6 +48,12 @@ RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=04
 
 # Match the full image: ship Playwright and Chromium outside the volume-backed
 # home so workers can run browser tests without a first-use download.
+#
+# This is the last layer that runs as developer, so it is also the last chance to
+# clear whatever installing Playwright left in $HOME: full gets a later toolset
+# RUN that does the same cleanup, and worker has none. Home is volume-backed and
+# seeded once, so residue here freezes into every fresh worker volume and trips
+# the home-size check.
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
 RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=0400 \
     if [ -s /run/secrets/github_token ]; then \
@@ -58,7 +64,9 @@ RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=04
            XDG_STATE_HOME="$BUILD_SCRATCH/state"; \
     npm install -g "playwright@${PLAYWRIGHT_VERSION}" \
     && mise reshim --force \
-    && rm -rf "$BUILD_SCRATCH"
+    && rm -rf "$BUILD_SCRATCH" "/home/${USERNAME}/.cache" "/home/${USERNAME}/.local" \
+    && install -d -o "$USERNAME" -g "$USERNAME" \
+        "/home/${USERNAME}/.cache" "/home/${USERNAME}/.local"
 
 USER root
 RUN playwright install --with-deps chromium \

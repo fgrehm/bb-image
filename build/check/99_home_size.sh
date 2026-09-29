@@ -13,5 +13,10 @@ echo "home is ${home_kb}K"
 [ "$home_kb" -le 48 ] ||
 	{
 		echo "home grew past 48K (it should stay near 24K); look for build residue writing into \$HOME (see AGENTS.md)" >&2
+		# Name the offenders instead of making the next person bisect the image: the
+		# usual culprits are mise's ~/.cache/sigstore-rust and ~/.local/state/mise,
+		# but a newly baked tool can put its download cache somewhere else.
+		"$ENGINE" run --rm "$img" /bin/bash -c \
+			'du -sk /home/developer/.[!.]* /home/developer/* 2>/dev/null | sort -rn | head -10' >&2 || true
 		exit 1
 	}
