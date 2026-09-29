@@ -9,7 +9,8 @@
 #
 # Usage:
 #   bb-backup backup --output DIR [--sqlite PATH]... [--keep N] SRC [SRC...]
-#   bb-backup state --output DIR [--keep N]
+#   bb-backup state --output DIR [--include PATH]... [--include-secrets]
+#       [--age-recipient RECIPIENT] [--keep N]
 #   bb-backup traces --output DIR [--include PATH]... [--flatten]
 #   bb-backup verify FILE
 #
@@ -45,6 +46,15 @@
 # --keep N       keep only the N newest archives in the output directory
 #                (default 0: prune nothing)
 #
+# state:
+# --output DIR       destination directory for the final archive (created if missing)
+# --include PATH     additional file or directory to archive; repeatable
+# --include-secrets  opt in to all plugin secrets/ directories
+# --age-recipient RECIPIENT age-encrypt the verified archive to this public recipient;
+#                    only ciphertext is written to the output directory
+# --keep N           keep only the N newest state archives (default 0)
+# --sqlite PATH      additionally snapshot a named live SQLite database
+#
 # traces:
 # --output DIR   the mirror's root (created if missing)
 # --include PATH an extra path to include, alongside the defaults. Not
@@ -78,7 +88,7 @@ umask 077
 
 usage() {
 	echo "usage: bb-backup backup --output DIR [--sqlite PATH]... [--keep N] SRC [SRC...]" >&2
-	echo "       bb-backup state --output DIR [--keep N]" >&2
+	echo "       bb-backup state --output DIR [--include PATH]... [--include-secrets] [--age-recipient RECIPIENT] [--keep N]" >&2
 	echo "       bb-backup traces --output DIR [--include PATH]... [--flatten]" >&2
 	echo "       bb-backup verify FILE" >&2
 	exit 2
@@ -92,6 +102,8 @@ sources=
 trace_includes=
 flatten=0
 state_profile=0
+include_secrets=0
+age_recipient=
 
 # The subcommand is the first argument and is required: there is deliberately
 # no default backup strategy for a bare invocation.
@@ -124,7 +136,19 @@ while [ $# -gt 0 ]; do
 		;;
 	--include)
 		[ $# -ge 2 ] || usage
+		[ "$mode" = traces ] || [ "$mode" = state ] || usage
 		trace_includes="$trace_includes $2"
+		shift 2
+		;;
+	--include-secrets)
+		[ "$mode" = state ] || usage
+		include_secrets=1
+		shift
+		;;
+	--age-recipient)
+		[ "$mode" = state ] && [ $# -ge 2 ] || usage
+		[ "$2" != '' ] || usage
+		age_recipient="$2"
 		shift 2
 		;;
 	--flatten)
@@ -184,11 +208,15 @@ fi
 if [ "$mode" = state ]; then
 	state_profile=1
 	[ "$arg" != '' ] || usage
-	[ "$sources" = '' ] && [ "$sqlite_files" = '' ] || usage
+	[ "$sources" = '' ] || usage
 	output="$arg"
+	if [ "$age_recipient" != '' ] && ! command -v age >/dev/null 2>&1; then
+		echo 'bb-backup: age is required for --age-recipient' >&2
+		exit 1
+	fi
 	# The state profile is intentionally bounded to bb-owned state plus the
 	# documented pi trace roots. Credentials and machine-wide home state are
-	# not inferred; plugin secrets and managed plugin code are excluded.
+	# not inferred; plugin secrets require explicit opt-in.
 	for p in "$HOME/.bb/bb.db" "$HOME/.bb/logs" "$HOME/.bb/pi-bridge-sessions" "$HOME/.bb/pi-extras-sessions" "$HOME/.bb/thread-storage" "$HOME/.pi/agent/sessions"; do
 		[ -e "$p" ] && sources="$sources $p"
 	done
@@ -199,21 +227,35 @@ if [ "$mode" = state ]; then
 			case "$(basename -- "$plugin")" in
 			cache | git | npm | runtime | node_modules | toolchain-*) continue ;;
 			esac
-			# Include per-plugin data files and runtime data directories, but
-			# never secrets, source/install trees, or caches.
+			# Include per-plugin data files and non-managed directories, but
+			# never source/install trees or caches.
 			for p in "$plugin"/*; do
 				[ -e "$p" ] || continue
 				case "$(basename -- "$p")" in
-				secrets | node_modules | runtime | cache | dist | build | src | source | install | installs) continue ;;
+				secrets)
+					[ "$include_secrets" = 1 ] || continue
+					;;
+				node_modules | runtime | cache | dist | build | src | source | install | installs) continue ;;
 				esac
 				sources="$sources $p"
 			done
 		done
-		# Find all SQLite databases under selected plugin state, excluding
-		# managed code/cache paths; SQLite .backup captures a consistent view.
-		discovered_dbs=$(find "$plugin_root" -type d \( -path "$plugin_root/git" -o -path "$plugin_root/npm" -o -name secrets -o -name node_modules -o -name runtime -o -name cache -o -name dist -o -name build -o -name src -o -name source -o -name install -o -name installs \) -prune -o -type f \( -name '*.db' -o -name '*.sqlite' -o -name '*.sqlite3' \) -print)
+		# Find SQLite databases under selected plugin state, excluding managed
+		# code/cache trees. Secrets are scanned only with explicit opt-in.
+		if [ "$include_secrets" = 1 ]; then
+			discovered_dbs=$(find "$plugin_root" -type d \( -path "$plugin_root/git" -o -path "$plugin_root/npm" -o -name 'toolchain-*' -o -name node_modules -o -name runtime -o -name cache -o -name dist -o -name build -o -name src -o -name source -o -name install -o -name installs \) -prune -o -type f \( -name '*.db' -o -name '*.sqlite' -o -name '*.sqlite3' \) -print)
+		else
+			discovered_dbs=$(find "$plugin_root" -type d \( -path "$plugin_root/git" -o -path "$plugin_root/npm" -o -name 'toolchain-*' -o -name secrets -o -name node_modules -o -name runtime -o -name cache -o -name dist -o -name build -o -name src -o -name source -o -name install -o -name installs \) -prune -o -type f \( -name '*.db' -o -name '*.sqlite' -o -name '*.sqlite3' \) -print)
+		fi
 		sqlite_files="$sqlite_files $discovered_dbs"
 	fi
+	for p in $trace_includes; do
+		[ -e "$p" ] || {
+			echo "bb-backup: no such state path: $p" >&2
+			exit 1
+		}
+		sources="$sources $p"
+	done
 	[ -f "$HOME/.bb/bb.db" ] && sqlite_files="$sqlite_files $HOME/.bb/bb.db"
 	[ "$sources" != '' ] || {
 		echo 'bb-backup: state: no bb state found' >&2
@@ -348,7 +390,11 @@ raw="$tmp.tar"
 # spaces in them are not supported.
 # shellcheck disable=SC2086
 if [ "$state_profile" = 1 ]; then
-	tar -cf "$raw" --exclude='*/secrets' --exclude='*/.bb/plugins/git' --exclude='*/.bb/plugins/npm' --exclude='*/node_modules' --exclude='*/runtime' --exclude='*/cache' --exclude='*/dist' --exclude='*/build' --exclude='*/src' --exclude='*/source' --exclude='*/install' --exclude='*/installs' --exclude='*/toolchain-*' --exclude='*-wal' --exclude='*-shm' $sources
+	if [ "$include_secrets" = 1 ]; then
+		tar -cf "$raw" --exclude='*/.bb/plugins/git' --exclude='*/.bb/plugins/npm' --exclude='*/node_modules' --exclude='*/runtime' --exclude='*/cache' --exclude='*/dist' --exclude='*/build' --exclude='*/src' --exclude='*/source' --exclude='*/install' --exclude='*/installs' --exclude='*/toolchain-*' --exclude='*-wal' --exclude='*-shm' $sources
+	else
+		tar -cf "$raw" --exclude='*/secrets' --exclude='*/.bb/plugins/git' --exclude='*/.bb/plugins/npm' --exclude='*/node_modules' --exclude='*/runtime' --exclude='*/cache' --exclude='*/dist' --exclude='*/build' --exclude='*/src' --exclude='*/source' --exclude='*/install' --exclude='*/installs' --exclude='*/toolchain-*' --exclude='*-wal' --exclude='*-shm' $sources
+	fi
 else
 	tar -cf "$raw" $sources
 fi
@@ -364,15 +410,24 @@ verify_one "$tmp"
 
 mkdir -p -- "$output"
 chmod 0700 -- "$output"
-mv -- "$tmp" "$output/$name"
-echo "bb-backup: wrote $output/$name"
+if [ "$state_profile" = 1 ] && [ "$age_recipient" != '' ]; then
+	ciphertext="$staging/$name.age"
+	age --encrypt --recipient "$age_recipient" --output "$ciphertext" "$tmp"
+	chmod 0600 -- "$ciphertext"
+	mv -- "$ciphertext" "$output/$name.age"
+	final="$output/$name.age"
+else
+	mv -- "$tmp" "$output/$name"
+	final="$output/$name"
+fi
+echo "bb-backup: wrote $final"
 
 if [ "$keep" -gt 0 ]; then
 	# Newest first; everything past the Nth goes. Only this script's own
 	# archives are considered, so other files in the directory are safe.
 	# shellcheck disable=SC2012,SC2010
 	for victim in $(
-		ls -1t -- "$output" | grep -E '^backup-[0-9]{8}-[0-9]{6}\.tar\.zst$' |
+		ls -1t -- "$output" | grep -E '^backup-[0-9]{8}-[0-9]{6}\.tar\.zst(\.age)?$' |
 			tail -n +"$((keep + 1))"
 	); do
 		rm -f -- "$output/$victim"

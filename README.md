@@ -4,6 +4,8 @@ OCI image family for running [bb](https://getbb.app) with projects and persisten
 
 ## Choose an image
 
+All flavors share `age`/`age-keygen`, the SQLite CLI and development files, and the common shell, Git, SSH client, archive, and mise tooling. Images are built and supported for `linux/amd64` only. See [tool availability](docs/tooling.md#shared-foundation).
+
 | Flavor | Tags | Includes |
 | --- | --- | --- |
 | Full (default) | `latest`, `edge`, `0.44.0`, `img-0.4.0` | bb, Node.js, Playwright + Chromium, dev tools, DB and document tools, backups |

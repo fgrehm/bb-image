@@ -1,6 +1,8 @@
 # Backups
 
-`/usr/local/share/bb/bb-backup` has three subcommands and no default: `backup` (the recovery archive), `traces` (the additive mirror), and `verify`. A bare `bb-backup` prints usage. It does not schedule anything. Container deployments should call it from a host systemd user timer, a Quadlet, or a compose sidecar cron. The `vm` flavors have systemd and a managed bb service, but deliberately ship no backup timer; a derived VM can add one when its backup destination and retention policy are known.
+`bb-backup` ships in `full`, `full-sudo`, `vm`, `vm-sudo`, and `exedev`, not slim or worker flavors. The underlying age and SQLite tools are available in every flavor.
+
+`/usr/local/share/bb/bb-backup` has four subcommands and no default: `backup` (the recovery archive), `state` (the discovered bb profile), `traces` (the additive mirror), and `verify`. A bare `bb-backup` prints usage. It does not schedule anything. Container deployments should call it from a host systemd user timer, a Quadlet, or a compose sidecar cron. The `vm` flavors have systemd and a managed bb service, but deliberately ship no backup timer; a derived VM can add one when its backup destination and retention policy are known.
 
 ## Recovery archive
 
@@ -8,15 +10,36 @@
 
 ```bash
 bb-backup state --output /backups --keep 7
+bb-backup state --output /backups --include-secrets --age-recipient age1... --include ~/.bb/plugin-host-artifacts
 ```
 
-The profile includes `~/.bb/bb.db`, bb logs, pi-bridge sessions, pi-extras sessions, thread storage, pi agent sessions, and per-plugin state. It discovers plugin SQLite files (`*.db`, `*.sqlite`, and `*.sqlite3`) and snapshots them with SQLite's online backup API. Other plugin top-level data files and directories such as `logs/`, `host-data/`, and `bridge-data/` are included. Plugin `secrets/` are deliberately excluded because they can contain API keys and other credentials. Managed plugin code/install trees, including the top-level `git/` and `npm/` roots used for `git:`/`npm:` plugin sources, `toolchain-*` installs, `node_modules`, runtime artifacts, caches, and raw SQLite `-wal`/`-shm` sidecars are excluded. SQLite files inside managed trees are not discovered or snapshotted; plugin-owned databases elsewhere are represented by consistent snapshots. It does not sweep the rest of `$HOME`; in particular, provider credentials and unrelated files are not included. If your deployment intentionally stores backup-worthy data elsewhere, use `backup` with explicit source paths and `--sqlite` arguments.
+### State scope
+
+The profile includes `~/.bb/bb.db`, bb logs, pi-bridge sessions, pi-extras sessions, thread storage, Pi agent sessions, and per-plugin state. It discovers plugin SQLite files (`*.db`, `*.sqlite`, and `*.sqlite3`) and snapshots them with SQLite's online backup API. Other plugin data files and directories such as `logs/`, `host-data/`, and `bridge-data/` are included.
+
+Automatic selection excludes plugin `secrets/` and managed code/install trees: top-level `git/` and `npm/` roots, `toolchain-*`, `node_modules`, and directories named `runtime`, `cache`, `dist`, `build`, `src`, `source`, `install`, or `installs`. Database discovery prunes those trees too. State archives exclude raw SQLite `-wal`/`-shm` sidecars. The profile does not sweep the rest of `$HOME`.
+
+### Caller inclusions and secrets
+
+Repeat `--include PATH` to add existing files or directories. State exclusion patterns still apply to these paths, so an include does not override a matching exclusion. SQLite discovery does not scan arbitrary caller includes: name additional live databases with `--sqlite PATH` to snapshot them consistently. Explicit `--sqlite` requests are appended as snapshots independently of the state exclusions; do not use them to name secrets or managed databases you intend to exclude.
+
+`--include-secrets` opts plugin secrets into automatic selection. It does not require encryption, so request `--age-recipient` when these credentials must not be published as plaintext.
+
+Source, include, and SQLite path lists do not support whitespace, even when command-line arguments are quoted. This limitation also affects discovered paths and trace sources. Keep output and temporary staging outside the selected source trees to avoid archiving backup artifacts. Use explicit `backup` mode when the state profile's exclusions do not fit your layout.
+
+### Encryption and output
+
+`--output DIR` selects the destination. Without encryption, archives are plaintext `.tar.zst` files. `--age-recipient RECIPIENT` encrypts the verified archive and publishes only `backup-<timestamp>.tar.zst.age` to that destination. Plaintext exists temporarily in a mode-0700 staging directory under `${TMPDIR:-/tmp}`. Use private local staging, not a synced destination. Cleanup removes staging files on normal exit; it is not secure erasure and cannot survive SIGKILL or a machine crash. Private decryption identities are supplied by the operator, never baked into the image.
+
+`--keep N` prunes matching plaintext and encrypted archives together in the output directory; its default, zero, prunes nothing. Use separate destinations for independent retention policies.
+
+### Explicit backup and restore
 
 ```bash
 bb-backup backup --output /backups --sqlite /home/developer/.bb/bb.db --keep 7 /home/developer
 ```
 
-That writes `/backups/backup-<timestamp>.tar.zst`, snapshotting the live bb database (only for the `--sqlite` paths you name; the sources are copied as-is otherwise) so the archive is not a mid-write mix of pages, keeping the 7 newest archives, and pruning the rest. Every archive is verified before it is named: the zstd stream is tested (`zstd -t`) and the tar payload is listed end to end (`tar -tf`), so a truncated or corrupt archive exits nonzero and never lands under the canonical name. `bb-backup verify FILE` re-runs that check for restore flows.
+That writes `/backups/backup-<timestamp>.tar.zst`, snapshotting the live bb database (only for the `--sqlite` paths you name; the sources are copied as-is otherwise) so the archive is not a mid-write mix of pages, keeping the 7 newest archives, and pruning the rest. Every archive is verified before it is named: the zstd stream is tested (`zstd -t`) and the tar payload is listed end to end (`tar -tf`), so a truncated or corrupt archive exits nonzero and never lands under the canonical name. `bb-backup verify FILE` re-runs that check for restore flows. For an age-encrypted archive, decrypt it to a private temporary `.tar.zst` first, then pass that file to `verify`; the image does not carry private identities.
 
 Restore is plain tar, but archive entries are relative to the filesystem root (`home/developer/...`), not the home directory. Extract into a staging directory, then copy its `home/developer/` contents into a fresh home volume while bb is stopped; recreate the container with that volume. The sqlite snapshot is stored at the same path as the original database and replaces its archived copy on extraction.
 
@@ -34,7 +57,7 @@ The read-only mount keeps bb free to serve while the archive runs; the sqlite sn
 
 `bb-backup traces` mirrors agent session traces and logs into a directory with rsync, additively and independently of bb: pi sessions (`~/.pi/agent/sessions`), bb logs (`~/.bb/logs`), the pi bridge (`~/.bb/pi-bridge-sessions`), pi-extras title/commit traces (`~/.bb/pi-extras-sessions`), and claude and codex state (`~/.claude`, `~/.codex`) are included by default when they exist. Locations a deployment always wants can be baked into the environment with `BB_BACKUP_TRACES_INCLUDES` (colon-separated, like `PATH`, missing entries skipped), so a compose file or timer unit carries the convention without flags; `--include PATH` adds paths on top and must exist. It never prunes and never deletes: each run selects files with modification times newer than the `.traces-last` marker in the output directory, and a file the source later removes stays in the mirror if it was already copied. Run it before traces are deleted or rotated away; files removed between runs, or introduced with modification times older than the marker, are not captured.
 
-Two layouts, chosen with a flag. The default preserves full source paths in the mirror (`/traces/home/developer/.bb/logs/server.log`). `--flatten` merges every source into the target instead, structure below each include preserved — the shape a manual `rsync -av src/* dest/` produces. That is what a synced remote usually wants, one directory per tool rather than one per machine or container:
+Two layouts, chosen with a flag. The default preserves full source paths in the mirror (`/traces/home/developer/.bb/logs/server.log`). `--flatten` merges every source into the target instead, structure below each include preserved , the shape a manual `rsync -av src/* dest/` produces. That is what a synced remote usually wants, one directory per tool rather than one per machine or container:
 
 ```bash
 bb-backup traces --output /mnt/traces/this-host/pi --flatten \

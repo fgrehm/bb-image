@@ -1,12 +1,17 @@
 # Tools and home state
 
-## What's in the full image
+## Shared foundation
 
-- Debian 13 slim, pinned by digest, running as an unprivileged `developer` user (uid/gid 1000)
+Every flavor includes Git, SSH client tooling, shell and archive utilities, mise, `age`/`age-keygen`, the `sqlite3` CLI, and SQLite development files. The package inventories under [`container/`](../container/) and the flavor recipes are the authoritative lists.
+
+Slim adds bb, Node.js, and lazy agent CLIs without full's browser and development tools. Worker prototypes omit the bb server. The [README flavor table](../README.md#choose-an-image) and [worker guide](workers.md) describe those choices.
+
+## What's added in the full image
+
 - Node.js, bb, and Playwright with Chromium installed at build time, so the image can serve and drive a browser without a first-run download
 - A baked dev toolset: `rg`, `jq`, `fd`, `shfmt`, `shellcheck`, `tmux`, `git-lfs`, and neovim, which is aliased to `vi` and `vim` for the whole container
-- The usual CLI gaps filled by apt: `ps`, `less`, `unzip`, `pkg-config`, `gpg`, `rsync`, `wget`, `file`, plus `bubblewrap` for agent sandboxing, `imagemagick` and asset tools (`cwebp`, `pngquant`, `optipng`, `jpegoptim`), `poppler-utils` with `qpdf` for PDFs, and `zstd` for compressed backups
-- `bb-backup`, a baked backup script with three subcommands: `backup` tars the persistent state to a zstd archive, snapshots live SQLite databases (`~/.bb/bb.db` and friends) with `sqlite3 .backup` so the archive holds a consistent copy, verifies the archive with `zstd -t` and a full `tar -tf` pass before it is named, and prunes by retention; `traces` mirrors agent session traces and logs (pi sessions, bb logs, the pi bridge, pi-extras traces, claude, codex) into a directory with rsync, additively and never pruning; `verify` re-runs the integrity check. See [Backups](backups.md)
+- A native build toolchain, PostgreSQL client/development tools, ImageMagick and image optimizers, and `poppler-utils` with `qpdf` for PDFs
+- `bb-backup`, a baked backup script with four subcommands: `backup` writes explicitly selected sources; `state` discovers bb/plugin data and documented trace roots, supports caller includes and opt-in plugin secrets, verifies archives before publishing, and optionally age-encrypts them; `traces` mirrors agent session traces and logs additively with rsync; `verify` re-runs the integrity check on plaintext `.tar.zst` archives. See [Backups](backups.md)
 - A UTF-8 locale (`LANG=C.UTF-8`) and `EDITOR`/`VISUAL` pointing at `vi`, so `git commit` without `-m` and `git rebase -i` work
 - mise-managed toolchains, agent CLIs, and prek, installed on first use
 - `$HOME` as the working directory, since bb hosts many projects and resolves them by path
@@ -18,7 +23,7 @@
 
 The image follows Omarchy's [lazy-loading mise stubs](https://omarchy.org/manual/development-tools/): rather than baking in every toolchain, it ships mise shims and lets a tool install itself the first time you call it.
 
-The toolset is `mise.toml` in this repo, installed into the image as the global mise config at `/opt/mise/config.toml`. Anything bb does not need in order to start is declared `lazy = true`, which makes mise generate bootstrap shims at build time. The first call to `go`, `python`, or `claude` installs that tool, then runs it.
+The toolset is `mise.toml` in this repo, installed into the image as the global mise config at `/opt/mise/config.toml`. Tools declared `lazy = true` receive bootstrap shims at build time; the baked developer tools are installed during the build instead. The first call to `go`, `python`, or `claude` installs that tool, then runs it.
 
 | Installed at build time | Installed on first use |
 | --- | --- |

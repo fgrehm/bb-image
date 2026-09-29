@@ -13,7 +13,7 @@ say "slim does not carry the full image's batteries"
 # database rather than PATH for what cannot be seen in PATH.
 crun --user root <<'SH'
 set -eu
-for c in playwright psql sqlite3 rg jq fd nvim tmux git-lfs shellcheck shfmt vi vim bb-backup go; do
+for c in playwright psql rg jq fd nvim tmux git-lfs shellcheck shfmt vi vim bb-backup go; do
 	if command -v "$c" >/dev/null 2>&1; then
 		echo "slim carries '$c', which belongs to the full image" >&2
 		exit 1
@@ -42,7 +42,7 @@ grep -q nvim /usr/local/bin/vi 2>/dev/null && {
 	echo "slim carries the vi wrapper" >&2
 	exit 1
 }
-for pkg in imagemagick poppler-utils postgresql-client libsqlite3-dev sqlite3 \
+for pkg in imagemagick poppler-utils postgresql-client \
 	build-essential qpdf webp pngquant; do
 	dpkg -s "$pkg" >/dev/null 2>&1 && {
 		echo "slim carries the apt package $pkg" >&2

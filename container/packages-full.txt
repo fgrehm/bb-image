@@ -1,7 +1,7 @@
 # Packages only the full batteries-included image carries. One per line; #
 # starts a comment. Installed by the full stage, before the node, bb and
 # Playwright layers, so the build tooling they occasionally need is present.
-# slim, slim-sudo and source do not inherit this file.
+# slim, slim-sudo, worker and worker-vm do not inherit this file.
 
 # The native-build tier: compiler, headers and metadata for anything that
 # compiles at install or runtime.
@@ -10,12 +10,9 @@ pkg-config
 libssl-dev
 zlib1g-dev
 
-# The database tier: what talks to a running postgres or reads a sqlite file
-# directly.
+# The database tier: what talks to a running postgres.
 libpq-dev
 postgresql-client
-libsqlite3-dev
-sqlite3
 
 # The document and image tier, about 21MB together with --no-install-recommends.
 # imagemagick is for image work that comes up constantly around screenshots and

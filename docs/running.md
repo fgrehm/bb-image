@@ -34,7 +34,7 @@ On Docker, `--userns=keep-id` does not exist. Rootful Docker already writes bind
 
 ## What persists
 
-One volume covers everything worth keeping: threads, projects, settings, the auth secret, provider logins, git config, ssh keys, and shell history. It is seeded from the image on first creation, which is where `~/.bb` and the shell config come from, and it stays small because nothing heavy lives in `$HOME`.
+One volume covers everything worth keeping: threads, projects, settings, the auth secret, provider logins, git config, ssh keys, and shell history. It is seeded from the image on first creation, which is where `~/.bb` and the shell config come from, and the image seeds only a small initial home. Projects, databases, session traces, and runtime caches can grow the persistent volume substantially; monitor its usage and back it up.
 
 | Mount | Holds | If you leave it out |
 | --- | --- | --- |

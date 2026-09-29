@@ -11,3 +11,4 @@
 # shipping this same registry chain, which is also what lets a home volume move
 # between flavors: one source means one hash history.
 .bb/AGENTS.md	7548daebd153faebec85f75f270d835c273d637be709af55afda433e7ba4eef5
+.bb/AGENTS.md	9a4fdf696d1c2d0dae3d04b65a881878a022e8378c8ebc92115b9623d051403e

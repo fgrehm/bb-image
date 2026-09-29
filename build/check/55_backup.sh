@@ -13,6 +13,9 @@ set -eu
 # The script is reached through the PATH symlink, so the symlink itself, its
 # exec bit, and what it points at are all part of the round trip.
 command -v zstd >/dev/null
+command -v age >/dev/null
+command -v age-keygen >/dev/null
+command -v sqlite3 >/dev/null
 command -v rsync >/dev/null
 [ -x /usr/local/bin/bb-backup ]
 [ "$(readlink -f /usr/local/bin/bb-backup)" = /usr/local/share/bb/bb-backup ]
@@ -57,6 +60,9 @@ sqlite3 /tmp/state/.bb/bb.db 'create table core(x); insert into core values (7);
 sqlite3 /tmp/state/.bb/plugins/example/data.db 'create table plugin(x); insert into plugin values (9);'
 sqlite3 /tmp/state/.bb/plugins/git/managed.db 'create table managed(x); insert into managed values (1);'
 sqlite3 /tmp/state/.bb/plugins/npm/managed.sqlite 'create table managed(x); insert into managed values (1);'
+mkdir -p /tmp/state/.bb/plugins/toolchain-test /tmp/state/.bb/plugins/example/toolchain-nested
+sqlite3 /tmp/state/.bb/plugins/toolchain-test/managed.db 'create table managed(x);'
+sqlite3 /tmp/state/.bb/plugins/example/toolchain-nested/managed.sqlite 'create table managed(x);'
 printf 'managed git source\n' > /tmp/state/.bb/plugins/git/source.js
 printf 'managed npm source\n' > /tmp/state/.bb/plugins/npm/package.json
 printf 'runtime data\n' > /tmp/state/.bb/plugins/example/logs/plugin.log
@@ -75,10 +81,39 @@ tar -C /tmp/state-restore -xf "$state_arch"
 [ "$(cat /tmp/state-restore/tmp/state/.bb/plugins/example/logs/plugin.log)" = 'runtime data' ]
 [ -e /tmp/state-restore/tmp/state/.pi/agent/sessions/t1.jsonl ]
 [ -e /tmp/state-restore/tmp/state/.bb/pi-extras-sessions/pi-extras-title-test.jsonl ]
-if tar -tf "$state_arch" | grep -E '/secrets/|/\.bb/plugins/(git|npm)/|/node_modules/|-(wal|shm)$'; then
+if tar -tf "$state_arch" | grep -E '/secrets/|/\.bb/plugins/(git|npm)/|/toolchain-[^/]+/|/node_modules/|-(wal|shm)$'; then
 	echo "state profile included plugin secrets, managed installs, or raw SQLite sidecars" >&2
 	exit 1
 fi
+
+# Explicit inclusions and secret opt-in are safe when encryption is requested:
+# only the ciphertext reaches the output directory, and decrypting it restores
+# the verified archive layout.
+mkdir -p /tmp/state-extra /tmp/state-encrypted-out /tmp/state-stage
+printf 'old ciphertext\n' > /tmp/state-encrypted-out/backup-20000101-000000.tar.zst.age
+printf 'unrelated file\n' > /tmp/state-encrypted-out/keep.txt
+printf 'caller data\n' > /tmp/state-extra/custom.txt
+sqlite3 /tmp/state-extra/custom.sqlite 'create table extra(x); insert into extra values (17);'
+age-keygen -o /tmp/state-identity.txt 2>/tmp/state-keygen.log
+state_recipient=$(sed -n 's/^# public key: //p' /tmp/state-identity.txt)
+[ "$state_recipient" != '' ]
+HOME=/tmp/state TMPDIR=/tmp/state-stage "$bb" state --output /tmp/state-encrypted-out --include /tmp/state-extra --sqlite /tmp/state-extra/custom.sqlite --include-secrets --age-recipient "$state_recipient" --keep 1
+state_cipher=$(ls /tmp/state-encrypted-out/*.tar.zst.age)
+[ ! -e /tmp/state-encrypted-out/backup-20000101-000000.tar.zst.age ]
+[ -e /tmp/state-encrypted-out/keep.txt ]
+[ "$(find /tmp/state-encrypted-out -maxdepth 1 -type f -name '*.tar.zst*' | wc -l)" = 1 ]
+[ -z "$(find /tmp/state-stage -mindepth 1 -print -quit)" ]
+age --decrypt -i /tmp/state-identity.txt --output /tmp/state-decrypted.tar.zst "$state_cipher"
+"$bb" verify /tmp/state-decrypted.tar.zst
+mkdir /tmp/state-decrypted
+tar -C /tmp/state-decrypted -xf /tmp/state-decrypted.tar.zst
+[ -e /tmp/state-decrypted/tmp/state/.bb/plugins/example/secrets/apiKey ]
+if tar -tf /tmp/state-decrypted.tar.zst | grep -E '/toolchain-[^/]+/'; then
+	echo "secret opt-in included managed toolchain databases" >&2
+	exit 1
+fi
+[ "$(cat /tmp/state-decrypted/tmp/state-extra/custom.txt)" = 'caller data' ]
+[ "$(sqlite3 /tmp/state-decrypted/tmp/state-extra/custom.sqlite 'select x from extra')" = 17 ]
 
 echo "traces: additive rsync mirror"
 # A bare invocation assumes no strategy, by design.

@@ -59,7 +59,7 @@ smolvm machine create --name bb --smolfile examples/smolvm-systemd/Smolfile --im
 
 ## Networking and credentials
 
-bb needs outbound access for provider APIs, Git, and package installs, so the example enables networking and publishes port 38886. The baked agent CLIs are intentionally unpinned; without a GitHub token, mise resolves them against GitHub's unauthenticated rate limit and can fail with an opaque 403.
+bb needs outbound access for provider APIs, Git, and package installs, so the example enables networking and publishes port 38886. The agent CLI declarations are intentionally unpinned and installed lazily on first use; without a GitHub token, mise resolves them against GitHub's unauthenticated rate limit and can fail with an opaque 403.
 
 smolvm secret references resolve per launch. Add this to a private copy of the Smolfile when token forwarding is needed:
 
@@ -78,7 +78,7 @@ The reference, rather than the token value, is stored in the machine definition.
 
 ## Architecture and sandboxing
 
-The published image is currently `linux/amd64` only. Matching the guest is automatic on x86_64 hosts; Apple Silicon requires `rosetta = true` in the Smolfile.
+Images are built and supported for `linux/amd64` only. Matching the guest is automatic on x86_64 hosts; Apple Silicon requires `rosetta = true` in the Smolfile.
 
 Bubblewrap works fully inside the microVM, including a fresh `/proc` mount with PID-namespace unsharing. The corresponding failure inside a nested rootless container is a container limitation and does not apply to the VM guest.
 

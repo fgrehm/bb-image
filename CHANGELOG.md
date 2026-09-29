@@ -8,6 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- Add `age`, `age-keygen`, the `sqlite3` CLI, and SQLite development files to the foundation shared by every image flavor.
 - Rootless Podman CLI in systemd VM flavors and `worker-vm`, with no Podman API socket. Local Podman image metadata shows an approximately 300 MiB increase in unpacked VM image size; compressed registry transfer size was not measured.
 
 ### Changed
@@ -17,8 +18,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
-- Add `bb-backup state` to discover and snapshot bb and plugin SQLite state, include plugin data and documented trace roots, and exclude credentials and managed source/cache files; preserve explicit `backup` selection for custom layouts.
+- Add `bb-backup state` to discover and snapshot bb/plugin SQLite state, include plugin data and documented trace roots, accept caller-supplied paths, and optionally age-encrypt the final archive. Plugin secrets remain excluded unless explicitly opted in; custom layouts retain explicit `backup` selection.
 - Exclude the managed `git:` and `npm:` plugin install roots from state archives and SQLite discovery.
+- Keep databases inside managed `toolchain-*` directories out of state backups, including when plugin secrets are opted in.
 - Include pi-extras title and commit traces from `~/.bb/pi-extras-sessions` in the generic state profile and default traces mirror.
 
 ## [0.4.0] - 2026-09-25

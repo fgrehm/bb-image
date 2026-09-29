@@ -27,15 +27,17 @@ ss -ltnp | grep ':3000'
 curl -fsS http://127.0.0.1:3000/api/v1/hosts
 ```
 
-From the host, exe.dev's private HTTPS proxy should reach the same bb service:
+Configure the root HTTP proxy target explicitly before testing HTTPS access:
 
 ```bash
-curl -fsS https://my-bb.exe.xyz/api/v1/hosts
+ssh exe.dev share port my-bb 3000
 ```
+
+Then open `https://my-bb.exe.xyz/api/v1/hosts` in a browser authenticated for the VM's private proxy. An unauthenticated `curl` is not a reliable bb health check; the loopback command above checks bb independently of proxy authentication.
 
 **Integration check still required:** verify that SSH login works with exe.dev's host-provided access while the guest SSH service is disabled and without the `exe.dev/login-user` label. If either assumption is wrong, revisit the guest SSH unit and label. The image currently leaves a `developer` linger marker; systemd linger starts that user's service manager at boot and keeps it running without an interactive login. Confirm whether exe.dev needs that user-session behavior.
 
-To explicitly point exe.dev's root HTTP proxy at bb, run `ssh exe.dev share port my-bb 3000`. The proxy is private by default. `EXPOSE` controls automatic default-port selection; it is not a firewall. Removing it does not block the listener: exe.dev also proxies alternate ports 3000–9999 to users who have access to the VM. See the [exe.dev proxy docs](https://exe.dev/docs/proxy) before treating this as a network boundary.
+The proxy is private by default. `EXPOSE` controls automatic default-port selection; it is not a firewall. Removing it does not block the listener: exe.dev also proxies alternate ports 3000–9999 to users who have access to the VM. See the [exe.dev proxy docs](https://exe.dev/docs/proxy) before treating this as a network boundary.
 
 The endpoint is private by default. Make it public only when the application is intended to be public:
 
@@ -62,7 +64,7 @@ The `exedev` flavor derives from the systemd `vm` flavor and adds the exe.dev in
 
 SSH host keys are removed during the build and are not baked into the OCI image. The `developer` account remains the account for project work, so bb, mise, and provider state remain together under its home directory.
 
-`exedev` is intentionally separate from `vm`. The base VM flavor does not install SSH tooling, because smolvm does not need it. `exedev` keeps bb listening on port 3000 rather than the local smolvm smoke-test port 38886; without `EXPOSE`, the root HTTP proxy target must be set explicitly.
+`exedev` is intentionally separate from `vm`. The base VM flavor includes the shared SSH client but does not install an SSH server, because smolvm does not need one. `exedev` keeps bb listening on port 3000 rather than the local smolvm smoke-test port 38886; without `EXPOSE`, the root HTTP proxy target must be set explicitly.
 
 ## Persistence and lifecycle
 

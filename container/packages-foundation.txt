@@ -1,6 +1,6 @@
 # Packages every image in the family carries. One per line; # starts a comment.
 # Installed by the foundation stage before mise, so the variants that branch off
-# it (slim, source, full) do not re-resolve this set.
+# it (slim, worker, full) do not re-resolve this set.
 #
 # The agent-host tier, what an agent host feels immediately: procps is `ps`, less
 # is git's pager, file is libmagic which agents reach for constantly, and gnupg
@@ -12,10 +12,13 @@
 #
 # openssh-client is ssh; git and gnupg come with it above.
 #
-# python3 is the arm64 blocker the README names for node-gyp native builds, and
-# the one package here mise has no backend for. At runtime the mise shim sits
-# ahead of /usr/bin on PATH, so bare python3 is mise's and this copy is reached
-# by absolute path only.
+# python3 provides the distro interpreter for native builds and system tools.
+# In full, mise's Python shim takes precedence; /usr/bin/python3 always reaches
+# the distro copy.
+#
+# age is the shared encryption utility; sqlite3 is the shared CLI, and
+# libsqlite3-dev provides SQLite headers and libraries in every flavor. Full's
+# bb-backup uses them, and other workloads can use them independently.
 #
 # bubblewrap is what agents sandbox themselves with: Claude Code's bash sandbox
 # shells out to `bwrap` (and can be pointed at it with CLAUDE_CODE_BUBBLEWRAP /
@@ -39,3 +42,6 @@ unzip
 wget
 zsh
 zstd
+age
+libsqlite3-dev
+sqlite3
