@@ -13,6 +13,8 @@ bb-backup state --output /backups --keep 7
 bb-backup state --output /backups --include-secrets --age-recipient age1... --include ~/.bb/plugin-host-artifacts
 ```
 
+Generate a key pair with `age-keygen`; keep the private identity outside the image and store its printed `age1...` recipient somewhere durable for backup jobs. To restore, decrypt with `age -d -i IDENTITY backup.tar.zst.age > backup.tar.zst`, then verify and extract the resulting archive as described below.
+
 ### State scope
 
 The profile includes `~/.bb/bb.db`, bb logs, pi-bridge sessions, pi-extras sessions, thread storage, Pi agent sessions, and per-plugin state. It discovers plugin SQLite files (`*.db`, `*.sqlite`, and `*.sqlite3`) and snapshots them with SQLite's online backup API. Other plugin data files and directories such as `logs/`, `host-data/`, and `bridge-data/` are included.
@@ -57,7 +59,7 @@ The read-only mount keeps bb free to serve while the archive runs; the sqlite sn
 
 `bb-backup traces` mirrors agent session traces and logs into a directory with rsync, additively and independently of bb: pi sessions (`~/.pi/agent/sessions`), bb logs (`~/.bb/logs`), the pi bridge (`~/.bb/pi-bridge-sessions`), pi-extras title/commit traces (`~/.bb/pi-extras-sessions`), and claude and codex state (`~/.claude`, `~/.codex`) are included by default when they exist. Locations a deployment always wants can be baked into the environment with `BB_BACKUP_TRACES_INCLUDES` (colon-separated, like `PATH`, missing entries skipped), so a compose file or timer unit carries the convention without flags; `--include PATH` adds paths on top and must exist. It never prunes and never deletes: each run selects files with modification times newer than the `.traces-last` marker in the output directory, and a file the source later removes stays in the mirror if it was already copied. Run it before traces are deleted or rotated away; files removed between runs, or introduced with modification times older than the marker, are not captured.
 
-Two layouts, chosen with a flag. The default preserves full source paths in the mirror (`/traces/home/developer/.bb/logs/server.log`). `--flatten` merges every source into the target instead, structure below each include preserved , the shape a manual `rsync -av src/* dest/` produces. That is what a synced remote usually wants, one directory per tool rather than one per machine or container:
+Two layouts, chosen with a flag. The default preserves full source paths in the mirror (`/traces/home/developer/.bb/logs/server.log`). `--flatten` merges every source into the target instead, preserving the structure below each include, like a manual `rsync -av src/* dest/`. That is what a synced remote usually wants, one directory per tool rather than one per machine or container:
 
 ```bash
 bb-backup traces --output /mnt/traces/this-host/pi --flatten \

@@ -16,9 +16,9 @@
 # In full, mise's Python shim takes precedence; /usr/bin/python3 always reaches
 # the distro copy.
 #
-# age is the shared encryption utility; sqlite3 is the shared CLI, and
-# libsqlite3-dev provides SQLite headers and libraries in every flavor. Full's
-# bb-backup uses them, and other workloads can use them independently.
+# age is the shared encryption utility; sqlite3 is the shared CLI used by
+# bb-backup. libsqlite3-dev makes SQLite headers and libraries available to
+# native builds and other workloads in every flavor.
 #
 # bubblewrap is what agents sandbox themselves with: Claude Code's bash sandbox
 # shells out to `bwrap` (and can be pointed at it with CLAUDE_CODE_BUBBLEWRAP /
