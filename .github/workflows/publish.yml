@@ -35,6 +35,13 @@ env:
   # The published image family. The Containerfile stages and the check flavors
   # use the same names; the majority of the steps are identical per flavor.
   FLAVORS: full slim slim-sudo full-sudo vm vm-sudo exedev worker worker-vm
+  # Host gates. Both need smolvm on the runner; only the flavors whose guest has
+  # an enabled bb.service can run the systemd boot gate. worker-vm boots systemd
+  # and is covered by the rootless Podman gate, which also proves its user
+  # manager and cgroup delegation come up, but has no server to health-check.
+  # make check's flavor-registry check asserts these are subsets of FLAVORS.
+  SMOLVM_FLAVORS: '["vm","vm-sudo","exedev","worker-vm"]'
+  BOOT_GATE_FLAVORS: '["vm","vm-sudo","exedev"]'
 
 jobs:
   publish:
@@ -192,7 +199,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Cache smolvm
-        if: matrix.flavor == 'vm' || matrix.flavor == 'vm-sudo' || matrix.flavor == 'exedev'
+        if: contains(fromJSON(env.SMOLVM_FLAVORS), matrix.flavor)
         id: smolvm-cache
         uses: actions/cache@v5
         with:
@@ -200,7 +207,7 @@ jobs:
           key: smolvm-${{ runner.os }}-${{ runner.arch }}-${{ env.SMOLVM_VERSION }}
 
       - name: Install smolvm for VM gate
-        if: (matrix.flavor == 'vm' || matrix.flavor == 'vm-sudo' || matrix.flavor == 'exedev') && steps.smolvm-cache.outputs.cache-hit != 'true'
+        if: contains(fromJSON(env.SMOLVM_FLAVORS), matrix.flavor) && steps.smolvm-cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -214,7 +221,7 @@ jobs:
             -C "$HOME/.cache/bb-image/smolvm-${SMOLVM_VERSION}"
 
       - name: Prepare smolvm host
-        if: matrix.flavor == 'vm' || matrix.flavor == 'vm-sudo' || matrix.flavor == 'exedev'
+        if: contains(fromJSON(env.SMOLVM_FLAVORS), matrix.flavor)
         shell: bash
         run: |
           set -euo pipefail
@@ -223,7 +230,7 @@ jobs:
           echo "$HOME/.cache/bb-image/smolvm-${SMOLVM_VERSION}" >> "$GITHUB_PATH"
 
       - name: Verify VM boot contract
-        if: matrix.flavor == 'vm' || matrix.flavor == 'vm-sudo' || matrix.flavor == 'exedev'
+        if: contains(fromJSON(env.BOOT_GATE_FLAVORS), matrix.flavor)
         run: make check-smolvm-systemd ENGINE=docker
         env:
           IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
@@ -231,7 +238,7 @@ jobs:
           FLAVOR: ${{ matrix.flavor }}
 
       - name: Verify rootless Podman CLI
-        if: matrix.flavor == 'vm' || matrix.flavor == 'vm-sudo' || matrix.flavor == 'exedev'
+        if: contains(fromJSON(env.SMOLVM_FLAVORS), matrix.flavor)
         run: make check-smolvm-podman ENGINE=docker
         env:
           IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}

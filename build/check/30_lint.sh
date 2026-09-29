@@ -2,7 +2,9 @@
 # img, root and say/crun come from there (SC2148/SC2153/SC2154 handled here).
 # shellcheck shell=sh disable=SC2154,SC2148
 # shellcheck source=build/check/lib.sh
-# check-flavors: full exedev
+# A repository check: the same scripts are linted in every matrix job, so it runs
+# once, in the full job (see build/check.sh), instead of twice.
+# check-scope: repo
 
 # Lints every script in the repo, by the baked shfmt and shellcheck inside the
 # image itself; catches a bad edit in fontconfig.sh or in here before the

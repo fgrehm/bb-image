@@ -2,7 +2,9 @@
 # img, root and say/crun come from there (SC2148/SC2153/SC2154 handled here).
 # shellcheck shell=sh disable=SC2154,SC2148
 # shellcheck source=build/check/lib.sh
-# check-flavors: full slim slim-sudo full-sudo exedev
+# A repository check: both pins live in the repo, not in the image, so it runs
+# once in the full job (see build/check.sh) instead of once per flavor.
+# check-scope: repo
 
 # The repo's Containerfile and mise.toml have to agree on the node version; the
 # duplication is what keeps a toolset edit from rebuilding the node and bb layers.

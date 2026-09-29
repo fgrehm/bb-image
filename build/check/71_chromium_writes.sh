@@ -2,7 +2,11 @@
 # shellcheck source=build/check/lib.sh
 # Partials sourced by build/check.sh via build/check/lib.sh: IMAGE/TAG/ENGINE,
 # img, root and the say/crun helpers come from there.
-# check-flavors: full full-sudo exedev
+# The most expensive check in the harness (compiles the shim, drives two Chromium
+# launches). The fontconfig and browser layers it examines are the same layer in
+# every flavor of the full lineage, so it runs on full alone, where the compiler
+# and the browser are both present.
+# check-flavors: full
 
 # The gate a942844 exists for, asserted at syscall level via build/fcshim.c: an
 # interposer over chmod/unlink/openat that logs every fontconfig-related path

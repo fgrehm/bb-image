@@ -14,10 +14,17 @@ slim_node="$(sed -n 's/^node = "\(.*\)"$/\1/p' "$root/container/mise-slim.toml")
 playwright_arg="$(sed -n 's/^ARG PLAYWRIGHT_VERSION=\(.*\)$/\1/p' "$root/container/Containerfile.foundation")"
 crun --env BB_NODE_VERSION="$node_arg" --env PLAYWRIGHT_VERSION="$playwright_arg" <<'SH'
 set -eu
-[ "$(id -u)" = "$( [ "$FLAVOR" = worker ] && id -u developer || echo 0 )" ] || {
-	echo "unexpected worker image user" >&2
-	exit 1
-}
+if [ "$FLAVOR" = worker ]; then
+	[ "$(id -u)" = "$(id -u developer)" ] || {
+		echo "the container worker must start as its developer user" >&2
+		exit 1
+	}
+else
+	[ "$(id -u)" = 0 ] || {
+		echo "worker-vm must boot an init system as root" >&2
+		exit 1
+	}
+fi
 [ "$(node --version)" = "v$BB_NODE_VERSION" ]
 command -v npm >/dev/null
 for c in claude codex pi opencode pnpm playwright; do command -v "$c" >/dev/null; done
