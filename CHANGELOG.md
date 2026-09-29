@@ -8,6 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- Publish and verify the `worker` and `worker-vm` image flavors, with separate `-worker` and `-worker-vm` tags. Both worker flavors include Playwright and Chromium for browser-based tasks.
 - Add `age`, `age-keygen`, the `sqlite3` CLI, and SQLite development files to the foundation shared by every image flavor.
 - Rootless Podman CLI in systemd VM flavors and `worker-vm`, with no Podman API socket. Local Podman image metadata shows an approximately 300 MiB increase in unpacked VM image size; compressed registry transfer size was not measured.
 

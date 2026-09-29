@@ -34,7 +34,7 @@ env:
   SMOLVM_VERSION: 1.18.2
   # The published image family. The Containerfile stages and the check flavors
   # use the same names; the majority of the steps are identical per flavor.
-  FLAVORS: full slim slim-sudo full-sudo vm vm-sudo exedev
+  FLAVORS: full slim slim-sudo full-sudo vm vm-sudo exedev worker worker-vm
 
 jobs:
   publish:
@@ -62,6 +62,10 @@ jobs:
             suffix: -vm-sudo
           - flavor: exedev
             suffix: -exedev
+          - flavor: worker
+            suffix: -worker
+          - flavor: worker-vm
+            suffix: -worker-vm
     permissions:
       contents: write
       packages: write

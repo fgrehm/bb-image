@@ -2,7 +2,8 @@
 # worker: a BB-free execution environment for manual machine enrollment.
 # No server, host daemon, credentials, or startup-time enrollment is baked in.
 # Node and the lazy agent CLIs are enough for the installer to fetch the exact
-# host-only bb-app build from whichever server the operator chooses. Keep this
+# host-only bb-app build from whichever server the operator chooses. Playwright
+# and Chromium are baked for browser-based worker tasks. Keep this
 # separate from slim: inheriting slim and uninstalling bb would retain its
 # bytes in a lower image layer and shadow the installer's private copy.
 #
@@ -17,6 +18,7 @@ FROM ${BASE_IMAGE} AS worker
 
 ARG USERNAME
 ARG BUILD_SCRATCH
+ARG PLAYWRIGHT_VERSION
 
 RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=0400 \
     if [ -s /run/secrets/github_token ]; then \
@@ -43,6 +45,25 @@ RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=04
     rm -rf "$BUILD_SCRATCH" "/home/${USERNAME}/.cache" "/home/${USERNAME}/.local" \
     && install -d -o "$USERNAME" -g "$USERNAME" \
         "/home/${USERNAME}/.cache" "/home/${USERNAME}/.local"
+
+# Match the full image: ship Playwright and Chromium outside the volume-backed
+# home so workers can run browser tests without a first-use download.
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
+RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=0400 \
+    if [ -s /run/secrets/github_token ]; then \
+      export MISE_GITHUB_TOKEN="$(cat /run/secrets/github_token)"; \
+    fi; \
+    export npm_config_cache="$BUILD_SCRATCH/npm" \
+           XDG_CACHE_HOME="$BUILD_SCRATCH/cache" \
+           XDG_STATE_HOME="$BUILD_SCRATCH/state"; \
+    npm install -g "playwright@${PLAYWRIGHT_VERSION}" \
+    && rm -rf "$BUILD_SCRATCH"
+
+USER root
+RUN playwright install --with-deps chromium \
+    && rm -rf /var/lib/apt/lists/* \
+    && chown -R "$USERNAME:$USERNAME" /opt/ms-playwright
+USER $USERNAME
 
 ENV LANG=C.UTF-8
 CMD ["sleep", "infinity"]

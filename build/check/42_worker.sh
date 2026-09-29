@@ -19,7 +19,13 @@ set -eu
 }
 [ "$(node --version)" = "v$BB_NODE_VERSION" ]
 command -v npm >/dev/null
-for c in claude codex pi opencode pnpm; do command -v "$c" >/dev/null; done
+for c in claude codex pi opencode pnpm playwright; do command -v "$c" >/dev/null; done
+playwright_arg="$(sed -n 's/^ARG PLAYWRIGHT_VERSION=\(.*\)$/\1/p' "$root/container/Containerfile.foundation")"
+[ "$(playwright --version 2>/dev/null | sed -n 's/^Version //p')" = "$playwright_arg" ] || {
+	echo "worker Playwright version does not match foundation pin" >&2
+	exit 1
+}
+[ -d /opt/ms-playwright ] || { echo "worker Chromium browser is missing" >&2; exit 1; }
 for c in bb bb-app sudo; do
 	if command -v "$c" >/dev/null 2>&1; then
 		echo "worker unexpectedly has $c" >&2
@@ -43,7 +49,7 @@ if [ "$FLAVOR" = worker-vm ]; then
 else
 	[ ! -e /sbin/init ] || { echo "container worker unexpectedly carries systemd" >&2; exit 1; }
 fi
-echo "worker runtime present, no server or enrollment baked in"
+echo "worker runtime and Playwright present, no server or enrollment baked in"
 SH
 
 case "$FLAVOR" in
