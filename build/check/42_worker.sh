@@ -11,7 +11,8 @@ slim_node="$(sed -n 's/^node = "\(.*\)"$/\1/p' "$root/container/mise-slim.toml")
 	echo "node mismatch: Containerfile says '$node_arg', mise-slim.toml says '$slim_node'" >&2
 	exit 1
 }
-crun --env BB_NODE_VERSION="$node_arg" <<'SH'
+playwright_arg="$(sed -n 's/^ARG PLAYWRIGHT_VERSION=\(.*\)$/\1/p' "$root/container/Containerfile.foundation")"
+crun --env BB_NODE_VERSION="$node_arg" --env PLAYWRIGHT_VERSION="$playwright_arg" <<'SH'
 set -eu
 [ "$(id -u)" = "$( [ "$FLAVOR" = worker ] && id -u developer || echo 0 )" ] || {
 	echo "unexpected worker image user" >&2
@@ -20,9 +21,8 @@ set -eu
 [ "$(node --version)" = "v$BB_NODE_VERSION" ]
 command -v npm >/dev/null
 for c in claude codex pi opencode pnpm playwright; do command -v "$c" >/dev/null; done
-playwright_arg="$(sed -n 's/^ARG PLAYWRIGHT_VERSION=\(.*\)$/\1/p' "$root/container/Containerfile.foundation")"
-[ "$(playwright --version 2>/dev/null | sed -n 's/^Version //p')" = "$playwright_arg" ] || {
-	echo "worker Playwright version does not match foundation pin" >&2
+[ "$(playwright --version 2>/dev/null | grep -oE 'Version [0-9.]+' | cut -d' ' -f2)" = "$PLAYWRIGHT_VERSION" ] || {
+	echo "worker Playwright version does not match foundation pin $PLAYWRIGHT_VERSION" >&2
 	exit 1
 }
 [ -d /opt/ms-playwright ] || { echo "worker Chromium browser is missing" >&2; exit 1; }

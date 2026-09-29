@@ -57,6 +57,7 @@ RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=04
            XDG_CACHE_HOME="$BUILD_SCRATCH/cache" \
            XDG_STATE_HOME="$BUILD_SCRATCH/state"; \
     npm install -g "playwright@${PLAYWRIGHT_VERSION}" \
+    && mise reshim --force \
     && rm -rf "$BUILD_SCRATCH"
 
 USER root
@@ -64,6 +65,15 @@ RUN playwright install --with-deps chromium \
     && rm -rf /var/lib/apt/lists/* \
     && chown -R "$USERNAME:$USERNAME" /opt/ms-playwright
 USER $USERNAME
+
+# The same fontconfig override full carries, for the same reason: a sandboxed
+# Chromium launch is denied the chmod fontconfig attempts on the root-owned
+# system cache directory. Chromium bundles its own fontconfig and Playwright
+# hands it the environment, so FONTCONFIG_FILE reaches the browser; a caller
+# that passes launch({ env }) replaces that environment and has to carry the
+# variable itself. The drift guard runs against this file under make check.
+COPY container/fonts.conf /usr/local/share/bb/fonts.conf
+ENV FONTCONFIG_FILE=/usr/local/share/bb/fonts.conf
 
 ENV LANG=C.UTF-8
 CMD ["sleep", "infinity"]
