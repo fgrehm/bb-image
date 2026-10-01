@@ -10,6 +10,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - Publish and verify the `worker` and `worker-vm` image flavors, with separate `-worker` and `-worker-vm` tags. Both worker flavors include Playwright and Chromium for browser-based tasks, along with the fontconfig override that keeps sandboxed browser launches off the root-owned system font cache.
 - Add `age`, `age-keygen`, the `sqlite3` CLI, and SQLite development files to the foundation shared by every image flavor.
+- Add a diagnostic toolset to every flavor: `htop` for CPU and memory, `tree`, `lsof` for what is holding a port or file, `dig` and `ping` for working out why something is not connecting, plus `strace`, `tcpdump` and `net-tools`. Adds roughly 10MB to every image, including `slim`.
 - Rootless Podman CLI in systemd VM flavors and `worker-vm`, with no Podman API socket. Local Podman image metadata shows an approximately 300 MiB increase in unpacked VM image size; compressed registry transfer size was not measured.
 
 ### Changed

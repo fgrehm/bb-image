@@ -45,3 +45,31 @@ zstd
 age
 libsqlite3-dev
 sqlite3
+
+# The diagnostic tier, for working out what an agent's container or guest is
+# actually doing. procps above gives `ps`, but these answer the questions ps
+# cannot: what is eating CPU or RAM (htop), what is on disk (tree), what is
+# holding a port or an unlinked file (lsof), whether a name resolves (dnsutils),
+# whether the path to it is reachable (iputils-ping), what is on the wire
+# (tcpdump), what a process is asking the kernel for (strace).
+#
+# htop and tree replace the ad-hoc equivalents agents hand-write. dnsutils and
+# iputils-ping are the two halves of "why is this not connecting", which is the
+# most common question about the published port. net-tools keeps netstat and
+# ifconfig alongside the iproute2 tools, because both spellings are what
+# documentation and older runbooks assume.
+#
+# strace and tcpdump are the heavier two and the reason to look twice before
+# adding them here rather than to packages-full.txt: both are inert until
+# someone runs them, but strace needs ptrace, which podman's default seccomp
+# denies, so under `make run` it only works with --cap-add SYS_PTRACE or
+# --security-opt seccomp=unconfined. tcpdump is similarly inert without
+# CAP_NET_RAW. Neither is a reason to distrust the other six.
+dnsutils
+htop
+iputils-ping
+lsof
+net-tools
+strace
+tcpdump
+tree
