@@ -1,0 +1,4 @@
+# Bootstrap access while developer has no password. The zz prefix places this
+# after the password-required rule. sudo bb-set-password retires this file.
+# Standard container launches block setuid elevation with no-new-privileges.
+developer ALL=(ALL) NOPASSWD: ALL

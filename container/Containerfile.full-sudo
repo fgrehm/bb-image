@@ -1,25 +1,7 @@
-# ---------------------------------------------------------------------------
-# full-sudo: the batteries-included work environment plus passwordless sudo,
-# for long-lived development containers and bb source development.
-# ---------------------------------------------------------------------------
-
+# Compatibility container profile: same payload as full.
+# Makefile omits no-new-privileges to permit sudo (initially passwordless).
 ARG BASE_IMAGE=localhost/bb-stage-full:dev
 FROM ${BASE_IMAGE} AS full-sudo
 
-ARG USERNAME
-
-USER root
-RUN set -e; \
-    apt-get update \
-    && apt-get install -y --no-install-recommends sudo \
-    && rm -rf /var/lib/apt/lists/*
-COPY --chmod=0440 container/sudoers-developer /etc/sudoers.d/developer
-USER $USERNAME
-
 CMD ["bash", "/home/developer/entrypoint.sh"]
-
-# Identity marker: the check harness refuses to run this image's checks as
-# another flavor, so a slim build can never pass because it was verified as
-# full, and vice versa. sudo stages stamp their own flavor over the one they
-# inherit.
 LABEL sh.bb.flavor="full-sudo"

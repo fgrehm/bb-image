@@ -1,8 +1,7 @@
 # ---------------------------------------------------------------------------
-# vm: a VM-only target with a real init system. It keeps full's locked-down
-# software profile, but boots systemd as root and runs bb as a developer-owned
-# service. Existing container targets retain their lightweight entrypoint and
-# unprivileged default user.
+# vm: full's software with a real init system and initial bootstrap guest sudo.
+# Boots systemd as root and runs bb as a developer-owned service. Containers
+# retain their lightweight entrypoint and unprivileged default user.
 # ---------------------------------------------------------------------------
 
 ARG BASE_IMAGE=localhost/bb-stage-full:dev

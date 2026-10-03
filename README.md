@@ -4,21 +4,21 @@ OCI image family for running [bb](https://getbb.app) with projects and persisten
 
 ## Choose an image
 
-All flavors share `age`/`age-keygen`, the SQLite CLI and development files, and the common shell, Git, SSH client, archive, and mise tooling. Images are built and supported for `linux/amd64` only. See [tool availability](docs/tooling.md#shared-foundation).
+All flavors share sudo (initially passwordless for `developer`), `age`/`age-keygen`, the SQLite CLI and development files, and the common shell, Git, SSH client, archive, and mise tooling. Images are built and supported for `linux/amd64` only. See [tool availability](docs/tooling.md#shared-foundation).
 
 | Flavor | Tags | Includes |
 | --- | --- | --- |
 | Full (default) | `latest`, `edge`, `0.44.0`, `img-0.4.0` | bb, Node.js, Playwright + Chromium, dev tools, DB and document tools, backups |
 | Slim | `slim`, `edge-slim`, `0.44.0-slim`, `img-0.4.0-slim` | bb, Node.js, mise, lazy pnpm and agent CLIs, without Chromium or dev tools |
-| Slim with sudo | `edge-slim-sudo`, `0.44.0-slim-sudo`, `img-0.4.0-slim-sudo` | Slim plus passwordless container sudo |
-| Full with sudo | `edge-full-sudo`, `0.44.0-full-sudo`, `img-0.4.0-full-sudo` | Full plus passwordless container sudo |
-| VM | `edge-vm`, `0.44.0-vm`, `img-0.4.0-vm` | Full, systemd as PID 1, bb service, rootless Podman CLI, without sudo |
-| VM with sudo | `edge-vm-sudo`, `0.44.0-vm-sudo`, `img-0.4.0-vm-sudo` | VM plus passwordless guest sudo |
+| Slim elevation profile | `edge-slim-sudo`, `0.44.0-slim-sudo`, `img-0.4.0-slim-sudo` | Slim payload; Makefile permits container sudo |
+| Full elevation profile | `edge-full-sudo`, `0.44.0-full-sudo`, `img-0.4.0-full-sudo` | Full payload; Makefile permits container sudo |
+| VM | `edge-vm`, `0.44.0-vm`, `img-0.4.0-vm` | Full, systemd as PID 1, bb service, rootless Podman CLI, initial passwordless guest sudo |
+| VM compatibility profile | `edge-vm-sudo`, `0.44.0-vm-sudo`, `img-0.4.0-vm-sudo` | Same payload and sudo policy as VM |
 | exe.dev | `edge-exedev`, `0.44.0-exedev`, `img-0.4.0-exedev` | VM plus exe.dev integration and rootless Podman CLI; guest SSH is disabled pending access validation |
 | Worker | `edge-worker`, `0.44.0-worker`, `img-0.4.0-worker` | Node.js, mise, lazy agent CLIs, Playwright + Chromium; no bb server or enrollment |
 | Worker VM | `edge-worker-vm`, `0.44.0-worker-vm`, `img-0.4.0-worker-vm` | Worker plus systemd and rootless Podman CLI for manually enrolled execution machines; no bb server or enrollment |
 
-Full keeps unsuffixed tags. `latest` and `slim` are moving aliases; sudo, VM, exe.dev, and worker flavors have no bare moving aliases. Sudo is opt-in and operates inside the rootless container or isolated VM guest. Container sudo requires dropping `no-new-privileges`; VM images require smolvm's default VM-grade workload profile rather than `--unprivileged`. The `exedev` flavor is for [exe.dev](https://exe.dev/docs/customization); it keeps guest SSH disabled and does not set the default proxy port until exe.dev access is verified. See [running and security options](docs/running.md), [running as a microVM](docs/smolvm.md), and [tag policy](docs/publishing.md).
+Full keeps unsuffixed tags. `latest` and `slim` are moving aliases; sudo, VM, exe.dev, and worker flavors have no bare moving aliases. All flavors initially grant passwordless sudo. Standard Makefile container launches block it with `no-new-privileges`; direct engine launches must pass that flag explicitly to block elevation. VM images permit guest sudo and require smolvm's default VM-grade workload profile rather than `--unprivileged`. Use `sudo bb-set-password` to require a password, as described in [sudo setup and recovery](docs/sudo.md). These changes are [Unreleased](CHANGELOG.md#unreleased); older pinned tags retain their original policy. The `exedev` flavor is for [exe.dev](https://exe.dev/docs/customization); it keeps guest SSH disabled and does not set the default proxy port until exe.dev access is verified. See [running and security options](docs/running.md), [running as a microVM](docs/smolvm.md), and [tag policy](docs/publishing.md).
 
 ## Run it as a container
 

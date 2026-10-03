@@ -128,17 +128,9 @@ machine_id="$("$SMOLVM" machine exec --name "$name" -- cat /etc/machine-id | tr 
 	echo "systemd did not initialize /etc/machine-id" >&2
 	exit 1
 }
+"$SMOLVM" machine exec --name "$name" -- \
+	su -s /bin/sh developer -c 'sudo -n true'
 case "$FLAVOR" in
-vm)
-	if "$SMOLVM" machine exec --name "$name" -- command -v sudo >/dev/null 2>&1; then
-		echo "the standard VM unexpectedly contains sudo after boot" >&2
-		exit 1
-	fi
-	;;
-vm-sudo)
-	"$SMOLVM" machine exec --name "$name" -- \
-		su -s /bin/sh developer -c 'sudo -n true'
-	;;
 exedev)
 	"$SMOLVM" machine exec --name "$name" -- test -x /usr/sbin/sshd
 	"$SMOLVM" machine exec --name "$name" -- sh -c '! systemctl is-active --quiet ssh.service'
@@ -171,6 +163,8 @@ done
 }
 "$SMOLVM" machine exec --name "$name" -- \
 	grep -qx phase0 /home/developer/.bb/vm-persistence-probe
+"$SMOLVM" machine exec --name "$name" -- \
+	su -s /bin/sh developer -c 'sudo -n true'
 [ "$("$SMOLVM" machine exec --name "$name" -- cat /etc/machine-id | tr -d '[:space:]')" = "$machine_id" ] || {
 	echo "machine identity changed across restart" >&2
 	exit 1
@@ -178,4 +172,4 @@ done
 
 stop_cleanly
 
-echo "$FLAVOR systemd gate passed: boot, target, bb, API, persistence, restart, and bounded shutdown"
+echo "$FLAVOR systemd gate passed: boot, target, bb, API, bootstrap sudo, persistence, restart, and bounded shutdown"

@@ -1,31 +1,46 @@
 # Partials sourced by build/check.sh via build/check/lib.sh; IMAGE/TAG/ENGINE,
 # img, root and say/crun come from there (SC2148/SC2153/SC2154 handled here).
 # shellcheck shell=sh disable=SC2154,SC2148
-# shellcheck source=build/check/lib.sh
 # check-scope: repo
 
-# The launch security profile is derived from FLAVOR in the Makefile: the standard
-# flavors get --security-opt no-new-privileges and the flavors that sell elevation
-# (the sudo pair, the systemd VM, and exe.dev's init workload) must not, because
-# passwordless setuid sudo stops working under it. 48_sudo proves the flag makes
-# elevation inert once it is passed; this proves the Makefile passes it to exactly
-# the right flavors, which is the half that can drift without anyone noticing.
-say "make run chooses no-new-privileges from the flavor, not by accident"
-for flavor in full slim slim-sudo full-sudo vm vm-sudo exedev; do
-	# GH_TOKEN on the command line keeps make from expanding its `gh auth token`
-	# fallback, which would reach the network in a check that is otherwise local.
-	cmd="$(make -C "$root" -n run FLAVOR="$flavor" GH_TOKEN=unused 2>/dev/null || true)"
+# Payload is shared; the container launch profile is the elevation opt-in.
+# Test hack too, since workers cannot use the server-oriented run target.
+say "Makefile launch profiles block standard containers and permit VM/sudo profiles"
+for flavor in full slim slim-sudo full-sudo vm vm-sudo exedev worker worker-vm; do
 	case "$flavor" in
-	*-sudo | vm | exedev) want=absent ;;
+	*-sudo | vm | exedev | worker-vm) want=absent ;;
 	*) want=present ;;
 	esac
-	case "$cmd" in
-	*"--security-opt no-new-privileges"*) got=present ;;
-	*) got=absent ;;
-	esac
-	[ "$got" = "$want" ] || {
-		echo "make run FLAVOR=$flavor has no-new-privileges '$got', expected '$want'" >&2
-		exit 1
-	}
+	for target in hack run; do
+		case "$target:$flavor" in
+		run:worker | run:worker-vm) continue ;;
+		esac
+		cmd="$(make -C "$root" -n "$target" FLAVOR="$flavor" GH_TOKEN=unused)"
+		case "$cmd" in
+		*"--security-opt no-new-privileges"*) got=present ;;
+		*) got=absent ;;
+		esac
+		[ "$got" = "$want" ] || {
+			echo "make $target FLAVOR=$flavor has no-new-privileges '$got', expected '$want'" >&2
+			exit 1
+		}
+	done
 done
-echo "no-new-privileges is present for the standard flavors and absent where elevation is sold"
+
+say "explicit SECURITY_OPTS overrides still select the container policy"
+cmd="$(make -C "$root" -n run FLAVOR=full SECURITY_OPTS= GH_TOKEN=unused)"
+case "$cmd" in
+*"--security-opt no-new-privileges"*)
+	echo "explicit elevation override was ignored" >&2
+	exit 1
+	;;
+esac
+cmd="$(make -C "$root" -n run FLAVOR=full-sudo 'SECURITY_OPTS=--security-opt no-new-privileges' GH_TOKEN=unused)"
+case "$cmd" in
+*"--security-opt no-new-privileges"*) ;;
+*)
+	echo "explicit no-new-privileges override was ignored" >&2
+	exit 1
+	;;
+esac
+echo "default profiles and explicit overrides agree with the elevation policy"

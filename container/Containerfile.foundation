@@ -21,7 +21,7 @@ ARG BUILD_SCRATCH=/tmp/build-scratch
 # ---------------------------------------------------------------------------
 # foundation: everything every variant in this family starts from. The distro
 # pinned above, the unprivileged user, mise with its data outside home, and the
-# packages every image carries (see container/packages-foundation.txt). It has
+# packages every image carries, including sudo (container/packages-foundation.txt). It has
 # no packaged bb, no server command and no variant-specific toolset; it is
 # internal and never published. Other Containerfiles build FROM its local tag.
 # ---------------------------------------------------------------------------
@@ -46,6 +46,12 @@ RUN apt-get update \
 
 RUN groupadd --gid $USER_GID $USERNAME \
     && useradd --uid $USER_UID --gid $USER_GID -m -s /bin/bash $USERNAME
+
+# All flavors start with bootstrap sudo; launch policy can block elevation.
+# Human password setup retires the separate bootstrap grant, not the base rule.
+COPY --chmod=0440 container/sudoers-developer /etc/sudoers.d/developer
+COPY --chmod=0440 container/sudoers-bootstrap /etc/sudoers.d/zz-bb-bootstrap
+COPY --chmod=0755 container/bb-set-password /usr/local/sbin/bb-set-password
 
 # mise, its toolchains, and the toolset all live outside the user's home.
 #

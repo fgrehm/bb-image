@@ -2,7 +2,7 @@
 
 ## Shared foundation
 
-Every flavor includes Git, SSH client tooling, shell and archive utilities, mise, `age`/`age-keygen`, the `sqlite3` CLI, and SQLite development files. The package inventories under [`container/`](../container/) and the flavor recipes are the authoritative lists.
+Every flavor includes sudo with the [human password setup helper](sudo.md), Git, SSH client tooling, shell and archive utilities, mise, `age`/`age-keygen`, the `sqlite3` CLI, and SQLite development files. The package inventories under [`container/`](../container/) and the flavor recipes are the authoritative lists.
 
 Slim adds bb, Node.js, and lazy agent CLIs without full's browser and development tools. Worker prototypes omit the bb server. The [README flavor table](../README.md#choose-an-image) and [worker guide](workers.md) describe those choices.
 

@@ -1,6 +1,6 @@
 # Running as a microVM
 
-[smolvm](https://smolmachines.com) boots OCI images as libkrun microVMs with their own guest kernel. The dedicated `vm` flavor adds systemd as the workload's PID 1, runs bb through an enabled `bb.service`, and includes the rootless Podman CLI; it otherwise carries the same software as `full`, without sudo. Choose `vm-sudo` when the guest also needs passwordless package administration.
+[smolvm](https://smolmachines.com) boots OCI images as libkrun microVMs with their own guest kernel. The dedicated `vm` flavor adds systemd as the workload's PID 1, runs bb through an enabled `bb.service`, and includes the rootless Podman CLI; it otherwise carries the same software as `full`, with initial passwordless guest sudo for `developer`. `vm-sudo` remains a compatibility name with the same policy.
 
 Use [`examples/smolvm-systemd/Smolfile`](../examples/smolvm-systemd/Smolfile) for the systemd VM. It follows `edge-vm` for testing; pin `img-<image-version>-vm` for a long-lived machine:
 
@@ -16,9 +16,9 @@ The VM disk persists `/home/developer`, Podman images and containers, system sta
 
 ## Runtime profile
 
-The example follows `edge-vm`. To use the elevated profile, copy it and change the image to `ghcr.io/fgrehm/bb:edge-vm-sudo` (or a pinned `img-<image-version>-vm-sudo`).
+The example follows `edge-vm`. All VM flavors initially permit passwordless sudo for `developer`. Run `sudo bb-set-password` to set a password and retire bootstrap passwordless access; the VM disk preserves that setup. Ordinary `passwd` alone does not change sudo policy. See [sudo and password setup](sudo.md).
 
-Use smolvm's default VM-grade image profile. Do not add `--unprivileged`: that option deliberately removes capabilities, writable cgroups, and mounts that init systems need. The microVM is the isolation boundary. The standard `vm` flavor has no sudo; `vm-sudo` grants passwordless root only inside the guest. Do not mount a container-engine socket or broad sensitive host paths into either flavor by default.
+Use smolvm's default VM-grade image profile. Do not add `--unprivileged`: that option deliberately removes capabilities, writable cgroups, and mounts that init systems need. The microVM is the isolation boundary. Guest root can access credentials and explicitly shared resources; do not mount a host container-engine socket or broad sensitive host paths into any flavor by default.
 
 ## Rootless Podman CLI
 
@@ -35,7 +35,7 @@ make ci FLAVOR=vm TAG=vm
 make check-smolvm-systemd FLAVOR=vm TAG=vm
 make check-smolvm-podman FLAVOR=vm TAG=vm
 
-# The elevated profile has the same boot gate.
+# The compatibility profile has the same boot gate.
 make ci FLAVOR=vm-sudo TAG=vm-sudo
 make check-smolvm-systemd FLAVOR=vm-sudo TAG=vm-sudo
 make check-smolvm-podman FLAVOR=vm-sudo TAG=vm-sudo

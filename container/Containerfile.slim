@@ -2,8 +2,8 @@
 # slim: the small extensible bb runtime. Node, packaged bb, lazy pnpm and the
 # coding-agent CLIs through mise, the entrypoint, and the hydration machinery.
 # Explicitly not here: Chromium and Playwright, the build toolchain, database
-# clients, media and document tools, the baked dev tools, the backup tooling,
-# and sudo. The node and bb layers are built again in this stage rather than
+# clients, media and document tools, the baked dev tools, and backup tooling.
+# Bootstrap sudo is inherited. The node and bb layers are built here rather than
 # shared with full: cache keys follow the parent chain, and full installs its
 # package tier between foundation and node, so the instructions cannot be
 # identical ones. Editing this block rebuilds only slim's layers.

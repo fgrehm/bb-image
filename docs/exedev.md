@@ -44,7 +44,7 @@ ssh exe.dev share port my-bb 3000
 
 Then open `https://my-bb.exe.xyz/api/v1/hosts` in a browser authenticated for the VM's private proxy. An unauthenticated `curl` is not a reliable bb health check; the loopback command above checks bb independently of proxy authentication.
 
-**Integration check still required:** verify that SSH login works with exe.dev's host-provided access while the guest SSH service is disabled and without the `exe.dev/login-user` label. If either assumption is wrong, revisit the guest SSH unit and label. The image currently leaves a `developer` linger marker; systemd linger starts that user's service manager at boot and keeps it running without an interactive login. Confirm whether exe.dev needs that user-session behavior.
+**Integration check still required:** verify that SSH login works with exe.dev's host-provided access while the guest SSH service is disabled and without the `exe.dev/login-user` label. If either assumption is wrong, revisit the guest SSH unit and label. The image currently leaves a `developer` linger marker; systemd linger starts that user's service manager at boot and keeps it running without an interactive login. Confirm whether exe.dev needs that user-session behavior and which account SSH selects. Bootstrap sudo is granted to `developer`, not an arbitrary platform-created account. Use `sudo bb-set-password` to require a password; see [sudo setup and recovery](sudo.md).
 
 The proxy is private by default. `EXPOSE` controls automatic default-port selection; it is not a firewall. Removing it does not block the listener: exe.dev also proxies alternate ports 3000–9999 to users who have access to the VM. See the [exe.dev proxy docs](https://exe.dev/docs/proxy) before treating this as a network boundary.
 
@@ -67,6 +67,7 @@ The `exedev` flavor derives from the systemd `vm` flavor and adds the exe.dev in
 - systemd runs as root at PID 1
 - `/usr/local/bin/init` prepares `/run/systemd` and cgroup v2, then executes `/sbin/init`
 - `bb.service` runs as `developer` and serves bb on port `3000`
+- `developer` initially has passwordless guest sudo, without a shared password or root-only enable step
 - `openssh-server` tooling is installed, but its guest service and socket are disabled
 - no `EXPOSE 3000` declaration or `exe.dev/login-user` label is baked into the image; configure the proxy target explicitly if needed
 - the VM's persistent disk preserves `/home/developer`, bb state, credentials, and project files

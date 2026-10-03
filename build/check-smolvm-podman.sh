@@ -74,6 +74,9 @@ done
 	exit 1
 }
 
+# Covers worker-vm too, which has no bb API for the systemd gate.
+user_exec sudo -n true
+
 delegate="$("$SMOLVM" machine exec --name "$name" -- systemctl show user@1000.service --property=Delegate --value | tr -d '\r')"
 [ "$delegate" = yes ] || {
 	echo "systemd is not delegating the developer user cgroup" >&2
@@ -123,4 +126,4 @@ user_exec sh -lc '
 	exit 1
 '
 
-echo "$FLAVOR rootless Podman CLI gate passed: uid mapping, cgroups, slirp networking, no API socket"
+echo "$FLAVOR rootless Podman CLI gate passed: bootstrap sudo, uid mapping, cgroups, slirp networking, no API socket"

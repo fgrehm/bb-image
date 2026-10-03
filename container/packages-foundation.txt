@@ -27,6 +27,8 @@
 # default seccomp permits under --userns=keep-id. See the notes in AGENTS.md
 # before changing the run flags.
 
+# Initial passwordless sudo in every flavor; launch policy controls elevation.
+sudo
 ca-certificates
 bubblewrap
 curl

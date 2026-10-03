@@ -19,16 +19,6 @@ for c in playwright psql rg jq fd nvim tmux git-lfs shellcheck shfmt vi vim bb-b
 		exit 1
 	fi
 done
-# sudo exists only in the sudo flavors; for a plain slim build it must be absent.
-case " $FLAVOR " in
-	*" slim-sudo "*) ;;
-	*)
-		command -v sudo >/dev/null 2>&1 && {
-			echo "slim carries sudo; only the sudo flavors may" >&2
-			exit 1
-		}
-		;;
-esac
 for path in /opt/ms-playwright /usr/local/share/bb/bb-backup \
 	/usr/local/share/bb/fonts.conf; do
 	[ -e "$path" ] && {

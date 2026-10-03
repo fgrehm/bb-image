@@ -33,7 +33,7 @@ for c in claude codex pi opencode pnpm playwright; do command -v "$c" >/dev/null
 	exit 1
 }
 [ -d /opt/ms-playwright ] || { echo "worker Chromium browser is missing" >&2; exit 1; }
-for c in bb bb-app sudo; do
+for c in bb bb-app; do
 	if command -v "$c" >/dev/null 2>&1; then
 		echo "worker unexpectedly has $c" >&2
 		exit 1
