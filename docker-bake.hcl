@@ -33,7 +33,7 @@ target "foundation" {
 target "full" {
   inherits   = ["_common"]
   dockerfile = "container/Containerfile.full"
-  contexts   = { parent = "target:foundation" }
+  contexts   = { parent = "target:worker" }
   args       = { BASE_IMAGE = "parent" }
 }
 

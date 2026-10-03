@@ -1,6 +1,6 @@
 # Packages only the full batteries-included image carries. One per line; #
-# starts a comment. Installed by the full stage, before the node, bb and
-# Playwright layers, so the build tooling they occasionally need is present.
+# starts a comment. Installed by full after worker's Node/browser layers, but
+# before bb, so native build prerequisites are available to its npm install.
 # slim, slim-sudo, worker and worker-vm do not inherit this file.
 
 # The native-build tier: compiler, headers and metadata for anything that

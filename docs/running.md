@@ -26,7 +26,18 @@ podman run -d --name bb \
   bb:dev
 ```
 
-`--security-opt no-new-privileges` is what `make run` and `make hack` pass for the standard `full` and `slim` container flavors. The `-sudo` container flavors omit it so setuid sudo can work. The base packages bring the standard Debian setuid binaries, including `su` and `mount`, and none of them is needed here, so this makes sure an agent cannot use them to reach container root. Drop the flag if you actually want `su` inside.
+Every image installs sudo and a passwordless grant for `developer`. Standard container profiles (`full`, `slim`, and `worker`) pass `--security-opt no-new-privileges` through `make run` and `make hack` (workers support only `make hack`), blocking setuid elevation, including sudo. The `-sudo` container flavors are retained as compatibility launch profiles with the same payload; Makefile omits the flag for them. It also blocks other setuid binaries such as `su` and `mount`. No `--privileged` flag is needed to permit sudo.
+
+To opt into passwordless elevation with a standard container image, explicitly choose the launch policy:
+
+```bash
+make run SECURITY_OPTS=
+make hack SECURITY_OPTS=
+```
+
+Direct Docker or Podman invocations choose their own policy: without `--security-opt no-new-privileges`, sudo works even on an unsuffixed image. The tag does not enforce the security setting. Guest/container root can access credentials and files shared into the environment, so keep sensitive host mounts and host container-engine sockets out of elevated environments.
+
+Setting a user password does not disable the `NOPASSWD` rule. To require password authentication, first set a password and then replace the grant with a validated password-required sudoers policy, retaining administrative access. Container changes under `/etc` are not part of the home volume and disappear on recreation unless separately provisioned; [VM disk state](smolvm.md) persists them. No shared password or password-setup prompt is baked in.
 
 `--userns=keep-id` is not optional in practice. Rootless podman maps container uid 1000 to a subordinate uid by default, so anything the container writes to a bind mount lands owned by a subuid and you cannot touch it on the host. `keep-id` maps it back to your own uid, and files come out owned by you.
 

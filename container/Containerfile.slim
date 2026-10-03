@@ -3,10 +3,9 @@
 # coding-agent CLIs through mise, the entrypoint, and the hydration machinery.
 # Explicitly not here: Chromium and Playwright, the build toolchain, database
 # clients, media and document tools, the baked dev tools, the backup tooling,
-# and sudo. The node and bb layers are built again in this stage rather than
-# shared with full: cache keys follow the parent chain, and full installs its
-# package tier between foundation and node, so the instructions cannot be
-# identical ones. Editing this block rebuilds only slim's layers.
+# but it inherits Node and sudo from the browser-free foundation. Standard
+# container launches block sudo through no-new-privileges. BB is installed here
+# independently of full, without inheriting worker's browser layers.
 # ---------------------------------------------------------------------------
 
 ARG BASE_IMAGE=localhost/bb-stage-foundation:dev
@@ -15,19 +14,6 @@ FROM ${BASE_IMAGE} AS slim
 ARG USERNAME
 ARG BUILD_SCRATCH
 ARG BB_VERSION
-
-# node, installed from the bootstrap config foundation wrote. Same recipe as the
-# full stage; the secret-mount details are documented there.
-RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=0400 \
-    if [ -s /run/secrets/github_token ]; then \
-      export MISE_GITHUB_TOKEN="$(cat /run/secrets/github_token)"; \
-    fi; \
-    export npm_config_cache="$BUILD_SCRATCH/npm" \
-           XDG_CACHE_HOME="$BUILD_SCRATCH/cache" \
-           XDG_STATE_HOME="$BUILD_SCRATCH/state"; \
-    mise install \
-    && mise reshim --force \
-    && rm -rf "$BUILD_SCRATCH"
 
 # bb, with the same npm arguments full uses; native addons are compiled or
 # fetched at install time either way.

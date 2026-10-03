@@ -1,6 +1,7 @@
 # worker-vm: the same BB-free environment with systemd for manually enrolled
 # machine services. PAM and the user bus let linger start developer's user
 # manager at boot; the installer can then create its unprivileged service.
+# Passwordless sudo is inherited for guest administration, not enrollment.
 # None of this enrolls the worker.
 # ---------------------------------------------------------------------------
 

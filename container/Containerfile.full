@@ -1,22 +1,17 @@
 # ---------------------------------------------------------------------------
-# full: the batteries-included image, the same artifact the unsuffixed tags
-# have always meant. Node, packaged bb, Playwright's Chromium, the build
-# toolchain, dev tools, backup tooling, and document/image support on top of
-# what foundation carries (container/packages-full.txt).
+# full: worker's Node, sudo, lazy agent CLIs and Playwright/Chromium, plus bb,
+# the build toolchain, baked dev tools, backups and document/image support.
+# Slim stays on the browser-free foundation rather than this branch.
 # ---------------------------------------------------------------------------
 
-ARG BASE_IMAGE=localhost/bb-stage-foundation:dev
+ARG BASE_IMAGE=localhost/bb-stage-worker:dev
 FROM ${BASE_IMAGE} AS full
 
 ARG DEBIAN_FRONTEND
 ARG USERNAME
 ARG BUILD_SCRATCH
 ARG BB_VERSION
-ARG PLAYWRIGHT_VERSION
 
-# foundation left off as the unprivileged user; the package tier full adds is
-# root's to install, and the stage steps back down before any of the layers
-# below run as developer.
 USER root
 COPY container/packages-full.txt /tmp/packages-full.txt
 RUN apt-get update \
@@ -25,113 +20,35 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* /tmp/packages-full.txt
 USER $USERNAME
 
-# GitHub token, optional. mise resolves versions and verifies artifact attestations
-# through api.github.com, which serves 60 requests per hour unauthenticated against 1000
-# with a token, so builds fail intermittently without one.
-#
-# The token arrives as a BuildKit secret and lives only for the duration of a RUN. It is
-# never a build arg and never an ENV, because both persist in image metadata, and it is
-# never echoed, because podman does not redact secrets from build output the way BuildKit
-# does. The file form is deliberate: reading it with `cat` and matching it with `grep -f`
-# keeps the value out of every process argument list. required=false keeps an ordinary
-# local build, with no token at all, working.
-#
-# uid, gid and mode are load-bearing here (or rather, they matter). The toolset RUNs run as
-# the unprivileged developer, and a secret mounted with default permissions is unreadable
-# to it. `cat` then fails inside a command substitution, which does not trip `set -e`, so
-# the build continues with an empty token and mise quietly stays unauthenticated. That
-# failure mode looks exactly like the rate limiting it was meant to fix. Keep 1000 in step
-# with USER_UID.
-#
-# The token does not reach the image: the token leak scan in build/check.sh runs
-# against the built image at verification time, before a release is pushed.
-
-# node is the runtime the image is built around. The version was declared at the
-# top and baked into the bootstrap config by foundation; this RUN installs it.
+# bb lives in the shared mise Node install. The inherited worker config has
+# runtime cache overrides, so invoke npm with Node's bin ahead of the shims:
+# no shim activation can redirect this RUN's scratch cache into persistent home.
+# Native install scripts must be allowed explicitly or bb fails at runtime.
 RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=0400 \
+    set -e; \
     if [ -s /run/secrets/github_token ]; then \
       export MISE_GITHUB_TOKEN="$(cat /run/secrets/github_token)"; \
     fi; \
     export npm_config_cache="$BUILD_SCRATCH/npm" \
            XDG_CACHE_HOME="$BUILD_SCRATCH/cache" \
            XDG_STATE_HOME="$BUILD_SCRATCH/state"; \
-    mise install \
-    && mise reshim --force \
-    && rm -rf "$BUILD_SCRATCH"
-
-# bb is installed globally into mise's node install, so bumping the node version
-# above means reinstalling it. npm gates native-addon install scripts, so the
-# three bb depends on have to be allowed explicitly or bb will not work:
-# @parcel/watcher, better-sqlite3, and node-pty are compiled or fetched here.
-RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=0400 \
-    if [ -s /run/secrets/github_token ]; then \
-      export MISE_GITHUB_TOKEN="$(cat /run/secrets/github_token)"; \
-    fi; \
-    export npm_config_cache="$BUILD_SCRATCH/npm" \
-           XDG_CACHE_HOME="$BUILD_SCRATCH/cache" \
-           XDG_STATE_HOME="$BUILD_SCRATCH/state"; \
+    export PATH="$(mise where node)/bin:$PATH"; \
     npm install -g \
         --allow-scripts=@parcel/watcher,better-sqlite3,node-pty \
         "bb-app@${BB_VERSION}" \
     && mise reshim --force \
-    && rm -rf "$BUILD_SCRATCH"
+    && rm -rf "$BUILD_SCRATCH" "/home/${USERNAME}/.cache" "/home/${USERNAME}/.local"
 
-# Playwright's Chromium, ready to use without a first-run download. Browsers go to
-# /opt/ms-playwright, outside home, for the same reason as the toolchain: a
-# volume-backed home would otherwise copy ~170MB into the volume at first boot.
-#
-# It is an npm global rather than a mise tool so that the browser download sits in
-# a layer toolset edits do not invalidate, and because `install --with-deps` needs
-# root, which the toolset layers deliberately are not.
-ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
-RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=0400 \
-    if [ -s /run/secrets/github_token ]; then \
-      export MISE_GITHUB_TOKEN="$(cat /run/secrets/github_token)"; \
-    fi; \
-    export npm_config_cache="$BUILD_SCRATCH/npm" \
-           XDG_CACHE_HOME="$BUILD_SCRATCH/cache" \
-           XDG_STATE_HOME="$BUILD_SCRATCH/state"; \
-    npm install -g "playwright@${PLAYWRIGHT_VERSION}" \
-    && mise reshim --force \
-    && rm -rf "$BUILD_SCRATCH"
-
-USER root
-RUN playwright install --with-deps chromium \
-    && rm -rf /var/lib/apt/lists/* \
-    && chown -R $USERNAME:$USERNAME /opt/ms-playwright
-USER $USERNAME
-
-# ~/.bb holds server state. It is created in the image so the copy-up into a home
-# volume carries the right uid/gid: a volume created empty would be root-owned
-# and bb could not write to it.
+# A fresh home volume needs developer ownership before bb starts. Heavy tools
+# and browsers remain outside home so volume copy-up cannot freeze image files.
 RUN mkdir -p /home/${USERNAME}/.bb
-
 COPY --chown=$USERNAME:$USERNAME container/entrypoint.sh /home/${USERNAME}/entrypoint.sh
-
-# The backup script, image-owned so it stays in step with the image instead
-# of freezing inside the home volume. Scheduling stays outside (see README).
 COPY --chmod=0755 container/bb-backup /usr/local/share/bb/bb-backup
 
-# ---------------------------------------------------------------------------
-# The toolset. Only this and below rebuild when mise.toml changes.
-# ---------------------------------------------------------------------------
-
-# Overwrites the bootstrap config written above. Owned by the user so that
-# `mise use -g` keeps working.
+# Only this and below depend on full's toolset. Node and Chromium are inherited
+# from worker; bb is installed above this COPY, so full toolset edits fetch none
+# of those again. Worker toolset edits do invalidate their full descendants.
 COPY --chown=$USERNAME:$USERNAME mise.toml /opt/mise/config.toml
-
-# Catch a BB_NODE_VERSION that no longer matches the toolset rather than shipping an
-# image whose node is not the one mise reports. Then install the baked tools and
-# reconcile the shim farm. This is the layer that downloads the baked dev tools
-# (rg, jq, nvim and friends), so a toolset edit re-downloads them. node, bb and
-# Playwright's Chromium sit above it and stay cached.
-#
-# The rm at the end does real work, and it stays last in the RUN. BUILD_SCRATCH
-# takes the downloads and mise's sigstore TUF cache out of $HOME and out of the
-# layer: home is volume-backed and seeded once, so leftovers there bake into every new
-# volume, and a cache committed to a layer stays in the image even after a later layer
-# deletes it. The rm has to follow node and bb, because those go through shims and run
-# mise again, which recreates the state directory.
 RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=0400 \
     set -e; \
     if [ -s /run/secrets/github_token ]; then \
@@ -146,66 +63,16 @@ RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=04
     && install -d -o "$USERNAME" -g "$USERNAME" \
         "/home/${USERNAME}/.cache" "/home/${USERNAME}/.local"
 
-# ---------------------------------------------------------------------------
-# Locale, editor, the fontconfig override, login-shell PATH, and the neovim alias.
-# This block sits last on purpose. An ENV invalidates every layer below it, so
-#
-# putting LANG up with the other ENVs would force node, bb and Playwright's
-# Chromium to rebuild. Nothing above needs these values.
-# ---------------------------------------------------------------------------
-
-# Chromium does fontconfig cache bookkeeping before any real work, and a sandboxed
-# agent is denied both writes:
-#
-#   - FcDirCacheWrite probes each cache directory in order and, when the probe
-#     fails but the directory exists, calls chmod(dir, 0755). Debian's first
-#     cachedir is /var/cache/fontconfig, which is root-owned image content, so
-#     every browser launch attempts that chmod. It is also what the agent sees as
-#     "Write blocked: /var/cache/fontconfig".
-#   - a directory cache that has to be rebuilt is preceded by an unlink of the
-#     .uuid marker beside the fonts. Nothing creates those markers in fontconfig
-#     2.15 (FcDirCacheCreateUUID is a stub), so this is an unlink of a path that
-#     does not exist, reached only when the cache is cold.
-#
-# fontconfig can add cache directories but never prune one (<reset-dirs/> covers
-# <dir> only), so Debian's file cannot be trimmed by including it. fonts.conf next
-# to this Containerfile is that file with the system cache directories removed and
-# the xdg one kept explicitly, because a config with no <cachedir> at all makes
-# fontconfig re-add /var/cache/fontconfig from its compiled-in defaults and warn
-# about it.
-#
-# Chromium bundles its own fontconfig, and Playwright hands its environment to the
-# browser, so FONTCONFIG_FILE reaches the Chromium that bb spawns. A caller that
-# passes Playwright's launch({ env }) option replaces that environment wholesale
-# and has to carry FONTCONFIG_FILE across itself.
-
-COPY container/fonts.conf /usr/local/share/bb/fonts.conf
-ENV FONTCONFIG_FILE=/usr/local/share/bb/fonts.conf
-
-# A font package bump that moved the distro file out from under this copy would
-# silently drop font directories and alias rules, so the comparison against the
-# distro file is a release gate. It lives in container/fontconfig.sh, next to the
-# file it guards, and runs under make check: the publish workflow runs make check
-# before an image is pushed, and make fonts-regen regenerates this file. Nothing
-# verification-shaped lives in this Containerfile; every RUN builds, none assert.
-
-# LANG is unset in the base image and LC_CTYPE lands on POSIX, which shows up as
-# encoding trouble in anything that prints non-ASCII. C.UTF-8 needs no locales
-# package on Debian 13.
-# git reaches for $EDITOR for `git commit` without -m and for `git rebase -i`.
-ENV LANG=C.UTF-8 \
-    EDITOR=vi \
+# Worker supplies LANG, PLAYWRIGHT_BROWSERS_PATH and FONTCONFIG_FILE, with the
+# same fontconfig override all browser-bearing flavors use. No duplicate copy
+# here: make check guards that inherited file against the distro config.
+ENV EDITOR=vi \
     VISUAL=vi
 
 USER root
 
-# neovim as vi and vim, for the whole container. These must be wrapper scripts and
-# not symlinks. mise's shims are symlinks to the mise binary and it dispatches on
-# the tool name in argv[0], so a shim reached as "vim" is rejected with "vim is not
-# a valid shim". `exec nvim` re-enters through the shim under its real name instead.
-# mise's neovim declares bins = ["nvim"], so no vim/vi shim exists to shadow these;
-# if one ever appeared it would break the alias, and the shim scan running under
-# make check catches that before a release ships.
+# Mise dispatches on argv[0], so vi/vim must be wrappers, not nvim shim symlinks.
+# The toolset declares only nvim's bin; make check rejects shadowing vi/vim shims.
 RUN set -e; \
     for name in vi vim; do \
       printf '%s\n' '#!/bin/sh' \
@@ -216,52 +83,19 @@ RUN set -e; \
     done; \
     ln -s /usr/local/share/bb/bb-backup /usr/local/bin/bb-backup
 
-# No verification RUNs anywhere in this file on purpose: every assertion that used
-# to live at the tail (writable mise dir, token leak scan, fontconfig drift) now
-# runs under make check, in build/check.sh and container/fontconfig.sh, and the
-# publish workflow runs make check before an image is pushed. This file only
-# builds the image, it never asserts about it.
-
-# The hydration registry is stamped by developer with an atomic rename, so its
-# directory, not just the files copied into it, must be developer-owned.
+# The hydrator atomically renames its registry as developer, so the directory
+# must be writable even though its image-owned inputs are copied below.
 RUN install -d -o "$USERNAME" -g "$USERNAME" /usr/local/share/bb
-
-# Back to the image user for the tail of the build, so the hydration below
-# writes both the stamped registry and its home copies as developer.
 USER $USERNAME
 
-# Home hydration. bb appends <dataDir>/AGENTS.md to the system prompt of every
-# provider-backed thread, so agents.md there is the container-level guidance
-# agents get about the mise toolchain; the rc snippets are the mise activation
-# blocks for interactive shells. All of these are home-volume content, and a
-# named volume is seeded from the image exactly once, so the entrypoint hydrates
-# them on every start with hydrate-home.sh against the registry shipped here.
-# The copies under /usr/local/share/bb are the pristine sources and the registry
-# that vouches for which shipped versions the volume may still carry; home
-# copies a user edited are left alone.
-#
-# This block sits last so that editing a managed source rebuilds only these
-# layers. Above the toolset COPY, an AGENTS.md edit would invalidate the mise
-# toolset layers and re-download the baked dev tools.
+# Managed home sources sit last. Existing volume copies update by hash on
+# startup; edited copies stay untouched. Seed new volumes at build time too.
 COPY --chown=$USERNAME:$USERNAME container/agents.md container/rc-bash.sh \
     container/rc-zsh.sh container/managed.tsv container/managed-prev.tsv \
     container/hydrate-home.sh /usr/local/share/bb/
-
-# Stamp the registry so its hashes cannot drift from the sources it points at,
-# then hydrate the image's home once: a freshly seeded volume is already
-# correct, so make hack works on a new volume without waiting for the
-# entrypoint.
 RUN bash /usr/local/share/bb/hydrate-home.sh stamp \
     && HOME=/home/${USERNAME} bash /usr/local/share/bb/hydrate-home.sh install
 
-# Default to serving bb, with the entrypoint forwarding signals so `podman stop`
-# is a clean shutdown. Override with a command to get a shell instead:
-#   podman run --rm -it bb:dev /bin/bash
-
+# Override worker's sleep command with the signal-forwarding server entrypoint.
 CMD ["bash", "/home/developer/entrypoint.sh"]
-
-# Identity marker: the check harness refuses to run this image's checks as
-# another flavor, so a slim build can never pass because it was verified as
-# full, and vice versa. sudo stages stamp their own flavor over the one they
-# inherit.
 LABEL sh.bb.flavor="full"

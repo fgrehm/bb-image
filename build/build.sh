@@ -17,10 +17,11 @@ while IFS= read -r line; do
 done <"$pins"
 
 case "$flavor" in
-full | slim | worker) stages="foundation $flavor" ;;
+slim | worker) stages="foundation $flavor" ;;
+full) stages='foundation worker full' ;;
 slim-sudo) stages='foundation slim slim-sudo' ;;
-full-sudo | vm) stages="foundation full $flavor" ;;
-vm-sudo | exedev) stages="foundation full vm $flavor" ;;
+full-sudo | vm) stages="foundation worker full $flavor" ;;
+vm-sudo | exedev) stages="foundation worker full vm $flavor" ;;
 worker-vm) stages='foundation worker worker-vm' ;;
 *)
 	echo "unknown flavor: $flavor" >&2

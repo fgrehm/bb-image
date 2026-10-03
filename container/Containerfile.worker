@@ -1,16 +1,10 @@
 # ---------------------------------------------------------------------------
-# worker: a BB-free execution environment for manual machine enrollment.
-# No server, host daemon, credentials, or startup-time enrollment is baked in.
-# Node and the lazy agent CLIs are enough for the installer to fetch the exact
-# host-only bb-app build from whichever server the operator chooses. Playwright
-# and Chromium are baked for browser-based worker tasks. Keep this
-# separate from slim: inheriting slim and uninstalling bb would retain its
-# bytes in a lower image layer and shadow the installer's private copy.
+# worker: foundation's Node and sudo, plus Playwright/Chromium and lazy agent
+# CLIs. No BB server, host daemon, credentials or enrollment is baked in.
+# Full inherits this browser-bearing base; slim stays browser-free.
 #
-# The container stays alive so the operator can exec the enrollment command.
-# The installer starts an unsupervised daemon in a container without systemd;
-# restarting the container requires an explicit restart of that daemon until
-# a separately validated supervision policy is in place.
+# The container stays alive for manual enrollment. Its detached daemon does
+# not recover after container restart without a separate supervision policy.
 # ---------------------------------------------------------------------------
 
 ARG BASE_IMAGE=localhost/bb-stage-foundation:dev
@@ -20,16 +14,31 @@ ARG USERNAME
 ARG BUILD_SCRATCH
 ARG PLAYWRIGHT_VERSION
 
+# Install the expensive browser layers before the mutable worker toolset COPY.
+# The bootstrap Node config is still active here, with no runtime cache overrides.
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
 RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=0400 \
+    set -e; \
     if [ -s /run/secrets/github_token ]; then \
       export MISE_GITHUB_TOKEN="$(cat /run/secrets/github_token)"; \
     fi; \
     export npm_config_cache="$BUILD_SCRATCH/npm" \
            XDG_CACHE_HOME="$BUILD_SCRATCH/cache" \
            XDG_STATE_HOME="$BUILD_SCRATCH/state"; \
-    mise install \
+    npm install -g "playwright@${PLAYWRIGHT_VERSION}" \
     && mise reshim --force \
-    && rm -rf "$BUILD_SCRATCH"
+    && rm -rf "$BUILD_SCRATCH" "/home/${USERNAME}/.cache" "/home/${USERNAME}/.local"
+
+USER root
+RUN playwright install --with-deps chromium \
+    && rm -rf /var/lib/apt/lists/* \
+    && chown -R "$USERNAME:$USERNAME" /opt/ms-playwright
+USER $USERNAME
+
+# Shared with full through inheritance. A caller replacing Playwright's launch
+# environment must carry FONTCONFIG_FILE across; make check guards distro drift.
+COPY container/fonts.conf /usr/local/share/bb/fonts.conf
+ENV FONTCONFIG_FILE=/usr/local/share/bb/fonts.conf
 
 COPY --chown=$USERNAME:$USERNAME container/mise-slim.toml /opt/mise/config.toml
 RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=0400 \
@@ -45,43 +54,6 @@ RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=04
     rm -rf "$BUILD_SCRATCH" "/home/${USERNAME}/.cache" "/home/${USERNAME}/.local" \
     && install -d -o "$USERNAME" -g "$USERNAME" \
         "/home/${USERNAME}/.cache" "/home/${USERNAME}/.local"
-
-# Match the full image: ship Playwright and Chromium outside the volume-backed
-# home so workers can run browser tests without a first-use download.
-#
-# This is the last layer that runs as developer, so it is also the last chance to
-# clear whatever installing Playwright left in $HOME: full gets a later toolset
-# RUN that does the same cleanup, and worker has none. Home is volume-backed and
-# seeded once, so residue here freezes into every fresh worker volume and trips
-# the home-size check.
-ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
-RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=0400 \
-    if [ -s /run/secrets/github_token ]; then \
-      export MISE_GITHUB_TOKEN="$(cat /run/secrets/github_token)"; \
-    fi; \
-    export npm_config_cache="$BUILD_SCRATCH/npm" \
-           XDG_CACHE_HOME="$BUILD_SCRATCH/cache" \
-           XDG_STATE_HOME="$BUILD_SCRATCH/state"; \
-    npm install -g "playwright@${PLAYWRIGHT_VERSION}" \
-    && mise reshim --force \
-    && rm -rf "$BUILD_SCRATCH" "/home/${USERNAME}/.cache" "/home/${USERNAME}/.local" \
-    && install -d -o "$USERNAME" -g "$USERNAME" \
-        "/home/${USERNAME}/.cache" "/home/${USERNAME}/.local"
-
-USER root
-RUN playwright install --with-deps chromium \
-    && rm -rf /var/lib/apt/lists/* \
-    && chown -R "$USERNAME:$USERNAME" /opt/ms-playwright
-USER $USERNAME
-
-# The same fontconfig override full carries, for the same reason: a sandboxed
-# Chromium launch is denied the chmod fontconfig attempts on the root-owned
-# system cache directory. Chromium bundles its own fontconfig and Playwright
-# hands it the environment, so FONTCONFIG_FILE reaches the browser; a caller
-# that passes launch({ env }) replaces that environment and has to carry the
-# variable itself. The drift guard runs against this file under make check.
-COPY container/fonts.conf /usr/local/share/bb/fonts.conf
-ENV FONTCONFIG_FILE=/usr/local/share/bb/fonts.conf
 
 ENV LANG=C.UTF-8
 CMD ["sleep", "infinity"]

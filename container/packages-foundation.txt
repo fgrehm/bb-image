@@ -1,6 +1,6 @@
 # Packages every image in the family carries. One per line; # starts a comment.
 # Installed by the foundation stage before mise, so the variants that branch off
-# it (slim, worker, full) do not re-resolve this set.
+# it (slim and worker, then full from worker) do not re-resolve this set.
 #
 # The agent-host tier, what an agent host feels immediately: procps is `ps`, less
 # is git's pager, file is libmagic which agents reach for constantly, and gnupg
@@ -27,6 +27,9 @@
 # default seccomp permits under --userns=keep-id. See the notes in AGENTS.md
 # before changing the run flags.
 
+# sudo is installed everywhere. Standard containers block setuid elevation with
+# no-new-privileges; VM guests and opt-in container profiles permit it.
+sudo
 ca-certificates
 bubblewrap
 curl

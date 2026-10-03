@@ -15,6 +15,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- Install sudo and a passwordless `developer` grant in every flavor. `vm`, `exedev`, and `worker-vm` now support guest administration without a bootstrap password; `vm-sudo` remains a compatibility profile. Standard container launches through Makefile still block elevation with `no-new-privileges`; direct engine launches without that flag now permit sudo, including on unsuffixed and worker images. This default-elevation change requires a major image release. No shared password or password-setup prompt is baked in.
+- Keep `slim-sudo` and `full-sudo` as compatibility container profiles with the same payload as their standard image; Makefile selects their elevated launch policy. Node and Chromium layers are shared between worker and full, while slim remains browser-free. Image-size changes have not yet been measured.
 - Refresh the pinned Debian 13 base to the current linux/amd64 image manifest.
 - Keep SSH tooling in `exedev` but disable its guest SSH service and socket while checking exe.dev-provided access. Remove the `EXPOSE 3000` declaration so exe.dev does not automatically select bb as the root HTTP proxy target, and remove the login-user label pending a live VM check. The proxy can be configured explicitly and remains private by default; `EXPOSE` selects the target but is not a firewall.
 

@@ -1,6 +1,6 @@
 # Running as a microVM
 
-[smolvm](https://smolmachines.com) boots OCI images as libkrun microVMs with their own guest kernel. The dedicated `vm` flavor adds systemd as the workload's PID 1, runs bb through an enabled `bb.service`, and includes the rootless Podman CLI; it otherwise carries the same software as `full`, without sudo. Choose `vm-sudo` when the guest also needs passwordless package administration.
+[smolvm](https://smolmachines.com) boots OCI images as libkrun microVMs with their own guest kernel. The dedicated `vm` flavor adds systemd as the workload's PID 1, runs bb through an enabled `bb.service`, and includes the rootless Podman CLI; it otherwise carries the same software as `full` and permits passwordless guest sudo for `developer`. `vm-sudo` remains a compatibility name with the same policy.
 
 Use [`examples/smolvm-systemd/Smolfile`](../examples/smolvm-systemd/Smolfile) for the systemd VM. It follows `edge-vm` for testing; pin `img-<image-version>-vm` for a long-lived machine:
 
@@ -16,9 +16,11 @@ The VM disk persists `/home/developer`, Podman images and containers, system sta
 
 ## Runtime profile
 
-The example follows `edge-vm`. To use the elevated profile, copy it and change the image to `ghcr.io/fgrehm/bb:edge-vm-sudo` (or a pinned `img-<image-version>-vm-sudo`).
+The example follows `edge-vm`. All VM flavors (`vm`, `vm-sudo`, `exedev`, and `worker-vm`) allow `developer` to run `sudo -n` without a bootstrap password. bb and enrolled daemons still run as `developer`; elevation happens only when a command invokes sudo. The older `-vm-sudo` tags remain compatible, but are no longer needed to obtain guest sudo on new images.
 
-Use smolvm's default VM-grade image profile. Do not add `--unprivileged`: that option deliberately removes capabilities, writable cgroups, and mounts that init systems need. The microVM is the isolation boundary. The standard `vm` flavor has no sudo; `vm-sudo` grants passwordless root only inside the guest. Do not mount a container-engine socket or broad sensitive host paths into either flavor by default.
+Use smolvm's default VM-grade image profile. Do not add `--unprivileged`: that option deliberately removes capabilities, writable cgroups, and mounts that init systems need. The microVM is the isolation boundary. Passwordless sudo grants root inside the guest, not the host, but guest root can access credentials and resources deliberately shared into the VM. Do not mount a host container-engine socket or broad sensitive host paths into any flavor by default. No root-only enable step is required, avoiding lockout when a platform provides only an unprivileged SSH login.
+
+For a password-required sudo policy, set a password and replace the image's `NOPASSWD` grant with a validated sudoers rule; setting a password alone changes nothing. Only remove administrative access after arranging an alternative. VM disk state retains these changes across restart, while a replacement VM needs them provisioned again. Older pinned image tags retain their original sudo policy.
 
 ## Rootless Podman CLI
 
@@ -35,7 +37,7 @@ make ci FLAVOR=vm TAG=vm
 make check-smolvm-systemd FLAVOR=vm TAG=vm
 make check-smolvm-podman FLAVOR=vm TAG=vm
 
-# The elevated profile has the same boot gate.
+# The compatibility profile has the same boot and sudo gates.
 make ci FLAVOR=vm-sudo TAG=vm-sudo
 make check-smolvm-systemd FLAVOR=vm-sudo TAG=vm-sudo
 make check-smolvm-podman FLAVOR=vm-sudo TAG=vm-sudo
@@ -46,7 +48,7 @@ make check-smolvm-systemd FLAVOR=exedev TAG=exedev
 make check-smolvm-podman FLAVOR=exedev TAG=exedev
 ```
 
-Each `make check-smolvm-systemd` invocation requires a host with smolvm and KVM/libkrun. It asserts systemd as workload PID 1, `multi-user.target`, bb service and API health, persistent home state, recovery after stop/start, and bounded shutdown. `make check-smolvm-podman` boots a separate disposable VM and checks rootless Podman, delegated cgroups, slirp networking, port publishing, and the absence of an API socket.
+Each `make check-smolvm-systemd` invocation requires a host with smolvm and KVM/libkrun. It asserts systemd as workload PID 1, `multi-user.target`, bb service and API health, guest sudo before and after restart, persistent home state, recovery after stop/start, and bounded shutdown. `make check-smolvm-podman` boots a separate disposable VM and checks guest sudo (including `worker-vm`), rootless Podman, delegated cgroups, slirp networking, port publishing, and the absence of an API socket.
 
 ## Local image archive
 

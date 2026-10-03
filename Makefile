@@ -43,18 +43,12 @@ MOUNTS ?=
 # what makes mounting your code work. Override with USERNS= when using docker.
 USERNS ?= --userns=keep-id
 
-# Neutralises setuid and file capabilities inside the container, so nothing in the image
-# can elevate. The base packages bring the standard Debian setuid set (su, mount, passwd,
-# chsh, chfn, gpasswd, newgrp, umount, and openssh's ssh-keysign) and none of it serves
-# this image's purpose, so agents should not be able to parlay it into container root.
-# Bubblewrap is unaffected, because creating a user namespace is not a privilege gain.
-#
-# sudo flavors cannot take this flag: passwordless sudo is setuid and stops
-# working under no-new-privileges. Both VM flavors need an unrestricted init
-# workload, even though the standard vm flavor has no sudo. Choosing one of
-# these flavors chooses the security posture, and the flag disappears with it.
-# Override with SECURITY_OPTS= if you need su inside a standard profile.
-ifneq (,$(filter %-sudo vm exedev,$(FLAVOR)))
+# Every image carries passwordless sudo. Standard container launches neutralise
+# setuid and file capabilities with no-new-privileges, including sudo itself.
+# Bubblewrap's user namespaces are unaffected. The -sudo compatibility profiles
+# omit this flag; SECURITY_OPTS= explicitly opts any container into elevation.
+# VM profiles need systemd's VM-grade workload and permit guest sudo by default.
+ifneq (,$(filter %-sudo vm exedev worker-vm,$(FLAVOR)))
 SECURITY_OPTS ?=
 else
 SECURITY_OPTS ?= --security-opt no-new-privileges

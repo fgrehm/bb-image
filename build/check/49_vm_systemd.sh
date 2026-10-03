@@ -46,24 +46,8 @@ printf '%s\n' "$unit" | grep -qx 'WantedBy=multi-user.target'
 	exit 1
 }
 
-case "$FLAVOR" in
-vm)
-	if command -v sudo >/dev/null 2>&1; then
-		echo "the standard VM flavor unexpectedly contains sudo" >&2
-		exit 1
-	fi
-	;;
-vm-sudo)
-	[ "$(su -s /bin/sh developer -c 'sudo -n id -u')" = 0 ] || {
-		echo "developer cannot use passwordless sudo inside the VM" >&2
-		exit 1
-	}
-	[ "$(stat -c %a /etc/sudoers.d/developer)" = 440 ] || {
-		echo "sudoers rule is not mode 0440" >&2
-		exit 1
-	}
-	;;
-esac
+# Shared sudo payload/policy checks run in 48_sudo for every flavor. The host
+# systemd gate additionally proves guest elevation after boot and restart.
 
 echo "systemd image contract is present for $FLAVOR"
 SH

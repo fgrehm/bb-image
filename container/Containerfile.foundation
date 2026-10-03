@@ -15,14 +15,14 @@ ARG BB_VERSION=0.44.0
 ARG PLAYWRIGHT_VERSION=1.63.0
 # A scratch dir every downloading RUN points its caches at and deletes before it
 # ends, ARG rather than ENV so none of it lands in the runtime environment; the
-# details are documented at first use in the full stage.
+# details are documented at first use in this stage.
 ARG BUILD_SCRATCH=/tmp/build-scratch
 
 # ---------------------------------------------------------------------------
 # foundation: everything every variant in this family starts from. The distro
 # pinned above, the unprivileged user, mise with its data outside home, and the
-# packages every image carries (see container/packages-foundation.txt). It has
-# no packaged bb, no server command and no variant-specific toolset; it is
+# packages every image carries (see container/packages-foundation.txt), including
+# sudo and the shared Node runtime. It has no bb, browser or server command; it is
 # internal and never published. Other Containerfiles build FROM its local tag.
 # ---------------------------------------------------------------------------
 
@@ -34,6 +34,7 @@ ARG USER_UID
 ARG USER_GID
 ARG MISE_VERSION
 ARG BB_NODE_VERSION
+ARG BUILD_SCRATCH
 
 # The package list is a file so the inventory is diffable and reviewable on its
 # own; the file carries the rationale comments. It is copied into /tmp and
@@ -46,6 +47,10 @@ RUN apt-get update \
 
 RUN groupadd --gid $USER_GID $USERNAME \
     && useradd --uid $USER_UID --gid $USER_GID -m -s /bin/bash $USERNAME
+
+# Every flavor carries sudo; container launch policy controls whether setuid
+# elevation works. VM flavors permit passwordless guest administration.
+COPY --chmod=0440 container/sudoers-developer /etc/sudoers.d/developer
 
 # mise, its toolchains, and the toolset all live outside the user's home.
 #
@@ -138,3 +143,18 @@ USER $USERNAME
 # bb hosts many projects and resolves them by path, so home is the sane default
 # rather than a single mount point. Mount a tree under it (see the Makefile).
 WORKDIR /home/${USERNAME}
+
+# Install Node once for every child, before any variant toolset is copied in.
+# The secret must be readable by developer. All download/state caches live in
+# this RUN's scratch directory; deleting them in a later layer reclaims nothing.
+RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=0400 \
+    set -e; \
+    if [ -s /run/secrets/github_token ]; then \
+      export MISE_GITHUB_TOKEN="$(cat /run/secrets/github_token)"; \
+    fi; \
+    export npm_config_cache="$BUILD_SCRATCH/npm" \
+           XDG_CACHE_HOME="$BUILD_SCRATCH/cache" \
+           XDG_STATE_HOME="$BUILD_SCRATCH/state"; \
+    mise install \
+    && mise reshim --force \
+    && rm -rf "$BUILD_SCRATCH" "/home/${USERNAME}/.cache" "/home/${USERNAME}/.local"
