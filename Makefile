@@ -44,10 +44,10 @@ MOUNTS ?=
 USERNS ?= --userns=keep-id
 
 # All flavors carry sudo, initially passwordless. Standard container profiles
-# block setuid elevation with no-new-privileges; -sudo compatibility profiles
-# and SECURITY_OPTS= permit it. Bubblewrap's user namespaces are unaffected.
+# block setuid elevation with no-new-privileges; SECURITY_OPTS= permits it.
+# Bubblewrap's user namespaces are unaffected.
 # VM profiles need the VM-grade workload and permit guest sudo from first boot.
-ifneq (,$(filter %-sudo vm exedev worker-vm,$(FLAVOR)))
+ifneq (,$(filter vm exedev worker-vm,$(FLAVOR)))
 SECURITY_OPTS ?=
 else
 SECURITY_OPTS ?= --security-opt no-new-privileges

@@ -2,7 +2,7 @@
 # img, root and say/crun come from there (SC2148/SC2153/SC2154 handled here).
 # shellcheck shell=sh disable=SC2154,SC2148
 # shellcheck source=build/check/lib.sh
-# check-flavors: vm vm-sudo exedev worker-vm
+# check-flavors: vm exedev worker-vm
 
 say "VM flavors ship rootless Podman CLI, with no API socket"
 crun <<'SH'

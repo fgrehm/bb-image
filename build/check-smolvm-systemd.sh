@@ -10,7 +10,7 @@ IMAGE="${IMAGE:-bb}"
 FLAVOR="${FLAVOR:-vm}"
 TAG="${TAG:-$FLAVOR}"
 case "$FLAVOR" in
-vm | vm-sudo | exedev) ;;
+vm | exedev) ;;
 *)
 	echo "unsupported VM flavor: $FLAVOR" >&2
 	exit 1

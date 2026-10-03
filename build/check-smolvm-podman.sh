@@ -9,7 +9,7 @@ IMAGE="${IMAGE:-bb}"
 FLAVOR="${FLAVOR:-vm}"
 TAG="${TAG:-$FLAVOR}"
 case "$FLAVOR" in
-vm | vm-sudo | exedev | worker-vm) ;;
+vm | exedev | worker-vm) ;;
 *)
 	echo "unsupported Podman VM flavor: $FLAVOR" >&2
 	exit 1

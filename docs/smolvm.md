@@ -1,6 +1,6 @@
 # Running as a microVM
 
-[smolvm](https://smolmachines.com) boots OCI images as libkrun microVMs with their own guest kernel. The dedicated `vm` flavor adds systemd as the workload's PID 1, runs bb through an enabled `bb.service`, and includes the rootless Podman CLI; it otherwise carries the same software as `full`, with initial passwordless guest sudo for `developer`. `vm-sudo` remains a compatibility name with the same policy.
+[smolvm](https://smolmachines.com) boots OCI images as libkrun microVMs with their own guest kernel. The dedicated `vm` flavor adds systemd as the workload's PID 1, runs bb through an enabled `bb.service`, and includes the rootless Podman CLI; it otherwise carries the same software as `full`, with initial passwordless guest sudo for `developer`.
 
 Use [`examples/smolvm-systemd/Smolfile`](../examples/smolvm-systemd/Smolfile) for the systemd VM. It follows `edge-vm` for testing; pin `img-<image-version>-vm` for a long-lived machine:
 
@@ -22,7 +22,7 @@ Use smolvm's default VM-grade image profile. Do not add `--unprivileged`: that o
 
 ## Rootless Podman CLI
 
-The `vm` family (`vm`, `vm-sudo`, and `exedev`) and the local `worker-vm` prototype include Podman for commands run as `developer`. There is **no Podman API socket or daemon endpoint**. The CLI uses rootless user namespaces and stores pulled images and containers under `/home/developer/.local/share/containers`; that storage persists on the VM disk and consumes its space. Check usage with `podman system df`; remove only data you no longer need with `podman system prune`.
+The `vm` family (`vm` and `exedev`) and the local `worker-vm` prototype include Podman for commands run as `developer`. There is **no Podman API socket or daemon endpoint**. The CLI uses rootless user namespaces and stores pulled images and containers under `/home/developer/.local/share/containers`; that storage persists on the VM disk and consumes its space. Check usage with `podman system df`; remove only data you no longer need with `podman system prune`.
 
 A lingering `developer` systemd user manager supplies delegated cgroups, so rootless `--memory` and `--cpus` limits work. Podman is configured to use `slirp4netns` for rootless networking in smolvm. The image grants `developer` access to `/dev/net/tun` through a systemd tmpfiles rule; wait for `user@1000.service` to become active after boot before using Podman. No Podman API socket is enabled. Do not expose a socket or TCP API without a separate security decision; [Podman's API](https://docs.podman.io/en/latest/markdown/podman-system-service.1.html) grants full control as the user running it.
 
@@ -34,11 +34,6 @@ All systemd VM flavors use the repository's host gate. The exedev variant uses i
 make ci FLAVOR=vm TAG=vm
 make check-smolvm-systemd FLAVOR=vm TAG=vm
 make check-smolvm-podman FLAVOR=vm TAG=vm
-
-# The compatibility profile has the same boot gate.
-make ci FLAVOR=vm-sudo TAG=vm-sudo
-make check-smolvm-systemd FLAVOR=vm-sudo TAG=vm-sudo
-make check-smolvm-podman FLAVOR=vm-sudo TAG=vm-sudo
 
 # The exe.dev adapter uses the same systemd smoke gate and checks bb on port 3000.
 make ci FLAVOR=exedev TAG=exedev

@@ -1,7 +1,7 @@
 # Partials sourced by build/check.sh via build/check/lib.sh; IMAGE/TAG/ENGINE,
 # img, root and say/crun come from there (SC2148/SC2153/SC2154 handled here).
 # shellcheck shell=sh disable=SC2154,SC2148
-# check-flavors: vm vm-sudo
+# check-flavors: vm
 
 say "the VM target carries an enabled systemd-managed bb service"
 crun <<'SH'

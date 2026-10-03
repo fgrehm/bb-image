@@ -1,7 +1,7 @@
 # Partials sourced by build/check.sh via build/check/lib.sh.
 # shellcheck shell=sh disable=SC2154,SC2148
 # shellcheck source=build/check/lib.sh
-# check-flavors: full slim slim-sudo full-sudo vm vm-sudo exedev worker worker-vm
+# check-flavors: full slim worker vm exedev worker-vm
 
 say "sudo reminder is image-owned and silent without a terminal"
 crun --user developer <<'SH'

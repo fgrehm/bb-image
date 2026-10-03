@@ -1,6 +1,6 @@
 # Running bb
 
-This guide covers the rootless container flavors. The `vm` and `vm-sudo` flavors boot systemd under smolvm instead; see [Running as a microVM](smolvm.md).
+This guide covers the rootless container flavors. The `vm` flavor boot systemd under smolvm instead; see [Running as a microVM](smolvm.md).
 
 ```bash
 make build
@@ -42,7 +42,7 @@ podman run -d --name bb \
   bb:dev
 ```
 
-Every flavor carries sudo, initially passwordless for `developer`. Standard container profiles (`full`, `slim`, and `worker`) block setuid elevation with `--security-opt no-new-privileges`; workers support `make hack`, not `make run`. The `-sudo` container compatibility profiles omit the flag, or you can deliberately opt in with `make hack SECURITY_OPTS=`. Direct engine launches without the flag permit sudo regardless of the tag. See [sudo and password setup](sudo.md) for `sudo bb-set-password`, recovery, and container recreation behavior.
+Every flavor carries sudo, initially passwordless for `developer`. Standard container profiles (`full`, `slim`, and `worker`) block setuid elevation with `--security-opt no-new-privileges`; workers support `make hack`, not `make run`. You can deliberately permit container elevation with `SECURITY_OPTS=` on any container flavor. Direct engine launches without the flag permit sudo regardless of the tag. See [sudo and password setup](sudo.md) for `sudo bb-set-password`, recovery, and container recreation behavior.
 
 `--userns=keep-id` is not optional in practice. Rootless podman maps container uid 1000 to a subordinate uid by default, so anything the container writes to a bind mount lands owned by a subuid and you cannot touch it on the host. `keep-id` maps it back to your own uid, and files come out owned by you.
 

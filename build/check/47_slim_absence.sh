@@ -1,7 +1,7 @@
 # Partials sourced by build/check.sh via build/check/lib.sh; IMAGE/TAG/ENGINE,
 # img, root and say/crun come from there (SC2148/SC2153/SC2154 handled here).
 # shellcheck shell=sh disable=SC2154,SC2148
-# check-flavors: slim slim-sudo
+# check-flavors: slim
 
 # The negative half of the slim contract. A flavor is defined by what it does
 # not carry as much as what it does: a slim image that quietly grew the full

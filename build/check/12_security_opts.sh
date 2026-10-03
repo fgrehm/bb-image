@@ -5,10 +5,10 @@
 
 # Payload is shared; the container launch profile is the elevation opt-in.
 # Test hack too, since workers cannot use the server-oriented run target.
-say "Makefile launch profiles block standard containers and permit VM/sudo profiles"
-for flavor in full slim slim-sudo full-sudo vm vm-sudo exedev worker worker-vm; do
+say "Makefile launch profiles block standard containers and permit VM sudo"
+for flavor in full slim vm exedev worker worker-vm; do
 	case "$flavor" in
-	*-sudo | vm | exedev | worker-vm) want=absent ;;
+	vm | exedev | worker-vm) want=absent ;;
 	*) want=present ;;
 	esac
 	for target in hack run; do
@@ -35,7 +35,7 @@ case "$cmd" in
 	exit 1
 	;;
 esac
-cmd="$(make -C "$root" -n run FLAVOR=full-sudo 'SECURITY_OPTS=--security-opt no-new-privileges' GH_TOKEN=unused)"
+cmd="$(make -C "$root" -n run FLAVOR=vm 'SECURITY_OPTS=--security-opt no-new-privileges' GH_TOKEN=unused)"
 case "$cmd" in
 *"--security-opt no-new-privileges"*) ;;
 *)

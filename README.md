@@ -10,15 +10,12 @@ All flavors share sudo (initially passwordless for `developer`), `age`/`age-keyg
 | --- | --- | --- |
 | Full (default) | `latest`, `edge`, `0.44.0`, `img-0.4.0` | bb, Node.js, Playwright + Chromium, dev tools, DB and document tools, backups |
 | Slim | `slim`, `edge-slim`, `0.44.0-slim`, `img-0.4.0-slim` | bb, Node.js, mise, lazy pnpm and agent CLIs, without Chromium or dev tools |
-| Slim elevation profile | `edge-slim-sudo`, `0.44.0-slim-sudo`, `img-0.4.0-slim-sudo` | Slim payload; Makefile permits container sudo |
-| Full elevation profile | `edge-full-sudo`, `0.44.0-full-sudo`, `img-0.4.0-full-sudo` | Full payload; Makefile permits container sudo |
 | VM | `edge-vm`, `0.44.0-vm`, `img-0.4.0-vm` | Full, systemd as PID 1, bb service, rootless Podman CLI, initial passwordless guest sudo |
-| VM compatibility profile | `edge-vm-sudo`, `0.44.0-vm-sudo`, `img-0.4.0-vm-sudo` | Same payload and sudo policy as VM |
 | exe.dev | `edge-exedev`, `0.44.0-exedev`, `img-0.4.0-exedev` | VM plus exe.dev integration and rootless Podman CLI; guest SSH is disabled pending access validation |
 | Worker | `edge-worker`, `0.44.0-worker`, `img-0.4.0-worker` | Node.js, mise, lazy agent CLIs, Playwright + Chromium; no bb server or enrollment |
 | Worker VM | `edge-worker-vm`, `0.44.0-worker-vm`, `img-0.4.0-worker-vm` | Worker plus systemd and rootless Podman CLI for manually enrolled execution machines; no bb server or enrollment |
 
-Full keeps unsuffixed tags. `latest` and `slim` are moving aliases; sudo, VM, exe.dev, and worker flavors have no bare moving aliases. All flavors initially grant passwordless sudo. Standard Makefile container launches block it with `no-new-privileges`; direct engine launches must pass that flag explicitly to block elevation. VM images permit guest sudo and require smolvm's default VM-grade workload profile rather than `--unprivileged`. Use `sudo bb-set-password` to require a password, as described in [sudo setup and recovery](docs/sudo.md). These changes are [Unreleased](CHANGELOG.md#unreleased); older pinned tags retain their original policy. The `exedev` flavor is for [exe.dev](https://exe.dev/docs/customization); it keeps guest SSH disabled and does not set the default proxy port until exe.dev access is verified. See [running and security options](docs/running.md), [running as a microVM](docs/smolvm.md), and [tag policy](docs/publishing.md).
+Full keeps unsuffixed tags. `latest` and `slim` are moving aliases; VM, exe.dev, and worker flavors have no bare moving aliases. All flavors initially grant passwordless sudo. Standard Makefile container launches block it with `no-new-privileges`; use `make run FLAVOR=full SECURITY_OPTS=` to permit container elevation on any container flavor. Direct engine launches must pass the no-new-privileges flag explicitly to block elevation. VM images permit guest sudo and require smolvm's default VM-grade workload profile rather than `--unprivileged`. Use `sudo bb-set-password` to require a password, as described in [sudo setup and recovery](docs/sudo.md). These changes are [Unreleased](CHANGELOG.md#unreleased); older pinned tags retain their original policy. The `exedev` flavor is for [exe.dev](https://exe.dev/docs/customization); it keeps guest SSH disabled and does not set the default proxy port until exe.dev access is verified. See [running and security options](docs/running.md), [running as a microVM](docs/smolvm.md), and [tag policy](docs/publishing.md).
 
 ## Run it as a container
 
@@ -41,7 +38,7 @@ Use `make ci FLAVOR=slim TAG=slim` to build and check another flavor. For direct
 - [Tools and home state](docs/tooling.md): baked and lazy tools, mise project pins, hydration, and operational gotchas.
 - [Backups](docs/backups.md): recovery archives and additive trace mirroring with `bb-backup`.
 - [Using this image as a base](docs/derived-images.md): ownership, tool installs, cache paths, and entrypoint contracts.
-- [Developing bb](docs/developing-bb.md): build and run bb from a checkout using `full-sudo`.
+- [Developing bb](docs/developing-bb.md): build and run bb from a checkout using `full` with `SECURITY_OPTS=`.
 - [Running as a microVM](docs/smolvm.md): systemd VM flavors, rootless Podman CLI, and [smolvm](https://smolmachines.com) examples.
 - [Worker images](docs/workers.md): BB-free `worker` and `worker-vm` targets for manually enrolled execution machines.
 - [Running on exe.dev](docs/exedev.md): the `exedev` flavor and its pending SSH/proxy integration checks.

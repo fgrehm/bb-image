@@ -2,7 +2,7 @@
 
 These changes are under [Unreleased](../CHANGELOG.md#unreleased); older pinned image tags retain their original sudo policy.
 
-Every flavor installs sudo and initially grants `developer` passwordless administration. Standard container launches through Makefile still block elevation with `--security-opt no-new-privileges`. The `slim-sudo` and `full-sudo` compatibility profiles omit that flag; `SECURITY_OPTS=` explicitly permits elevation on a standard container image. Raw Docker/Podman launches must pass the flag themselves to block sudo, regardless of the tag. No `--privileged` flag is needed just to permit sudo. All VM flavors permit guest sudo from first boot.
+Every flavor installs sudo and initially grants `developer` passwordless administration. Standard container launches through Makefile still block elevation with `--security-opt no-new-privileges`. Set `SECURITY_OPTS=` to explicitly permit elevation on any container flavor. Raw Docker/Podman launches must pass the flag themselves to block sudo, regardless of the tag. No `--privileged` flag is needed just to permit sudo. All VM flavors permit guest sudo from first boot.
 
 Container/guest root can read stored credentials and resources deliberately shared into the environment. Avoid sensitive host mounts or host container-engine sockets in elevated environments.
 

@@ -2,7 +2,7 @@
 # img, root and say/crun come from there (SC2148/SC2153/SC2154 handled here).
 # shellcheck shell=sh disable=SC2154,SC2148
 # shellcheck source=build/check/lib.sh
-# check-flavors: slim slim-sudo
+# check-flavors: slim
 
 # The slim equivalent of 40_baked_versions: the Containerfile pins bb and node,
 # and the slim toolset file has to carry the same node version the bootstrap

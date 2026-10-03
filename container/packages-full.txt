@@ -1,7 +1,7 @@
 # Packages only the full batteries-included image carries. One per line; #
 # starts a comment. Installed by the full stage, before the node, bb and
 # Playwright layers, so the build tooling they occasionally need is present.
-# slim, slim-sudo, worker and worker-vm do not inherit this file.
+# slim, worker and worker-vm do not inherit this file.
 
 # The native-build tier: compiler, headers and metadata for anything that
 # compiles at install or runtime.

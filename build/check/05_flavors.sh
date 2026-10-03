@@ -54,14 +54,11 @@ printf '%s\n' "$matrix" | jq -e '
   [.include[] | select(
     (.flavor == "full" and .suffix == "" and .smolvm == false and .boot == false) or
     (.flavor == "slim" and .suffix == "-slim" and .smolvm == false and .boot == false) or
-    (.flavor == "slim-sudo" and .suffix == "-slim-sudo" and .smolvm == false and .boot == false) or
-    (.flavor == "full-sudo" and .suffix == "-full-sudo" and .smolvm == false and .boot == false) or
     (.flavor == "vm" and .suffix == "-vm" and .smolvm == true and .boot == true) or
-    (.flavor == "vm-sudo" and .suffix == "-vm-sudo" and .smolvm == true and .boot == true) or
     (.flavor == "exedev" and .suffix == "-exedev" and .smolvm == true and .boot == true) or
     (.flavor == "worker" and .suffix == "-worker" and .smolvm == false and .boot == false) or
     (.flavor == "worker-vm" and .suffix == "-worker-vm" and .smolvm == true and .boot == false)
-  )] | length == 9
+  )] | length == 6
 ' >/dev/null
 
 workflow="$root/.github/workflows/publish.yml"

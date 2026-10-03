@@ -3,10 +3,7 @@
 foundation	-	no	-	no	no
 full	foundation	yes	-	no	no
 slim	foundation	yes	-slim	no	no
-slim-sudo	slim	yes	-slim-sudo	no	no
-full-sudo	full	yes	-full-sudo	no	no
 vm	full	yes	-vm	yes	yes
-vm-sudo	vm	yes	-vm-sudo	yes	yes
 exedev	vm	yes	-exedev	yes	yes
 worker	foundation	yes	-worker	no	no
 worker-vm	worker	yes	-worker-vm	yes	no

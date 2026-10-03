@@ -1,7 +1,0 @@
-# Compatibility container profile: same payload as slim.
-# Makefile omits no-new-privileges to permit sudo (initially passwordless).
-ARG BASE_IMAGE=localhost/bb-stage-slim:dev
-FROM ${BASE_IMAGE} AS slim-sudo
-
-CMD ["bash", "/home/developer/entrypoint.sh"]
-LABEL sh.bb.flavor="slim-sudo"
