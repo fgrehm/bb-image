@@ -1,7 +1,7 @@
 # ---------------------------------------------------------------------------
 # full: the batteries-included image, the same artifact the unsuffixed tags
 # have always meant. Node, packaged bb, Playwright's Chromium, the build
-# toolchain, dev tools, backup tooling, and document/image support on top of
+# toolchain, dev tools, and document/image support on top of
 # what foundation carries (container/packages-full.txt).
 # ---------------------------------------------------------------------------
 
@@ -108,10 +108,6 @@ RUN mkdir -p /home/${USERNAME}/.bb
 
 COPY --chown=$USERNAME:$USERNAME container/entrypoint.sh /home/${USERNAME}/entrypoint.sh
 
-# The backup script, image-owned so it stays in step with the image instead
-# of freezing inside the home volume. Scheduling stays outside (see README).
-COPY --chmod=0755 container/bb-backup /usr/local/share/bb/bb-backup
-
 # ---------------------------------------------------------------------------
 # The toolset. Only this and below rebuild when mise.toml changes.
 # ---------------------------------------------------------------------------
@@ -213,18 +209,13 @@ RUN set -e; \
         'exec nvim "$@"' \
         > "/usr/local/bin/$name"; \
       chmod 0755 "/usr/local/bin/$name"; \
-    done; \
-    ln -s /usr/local/share/bb/bb-backup /usr/local/bin/bb-backup
+    done
 
 # No verification RUNs anywhere in this file on purpose: every assertion that used
 # to live at the tail (writable mise dir, token leak scan, fontconfig drift) now
 # runs under make check, in build/check.sh and container/fontconfig.sh, and the
 # publish workflow runs make check before an image is pushed. This file only
 # builds the image, it never asserts about it.
-
-# The hydration registry is stamped by developer with an atomic rename, so its
-# directory, not just the files copied into it, must be developer-owned.
-RUN install -d -o "$USERNAME" -g "$USERNAME" /usr/local/share/bb
 
 # Back to the image user for the tail of the build, so the hydration below
 # writes both the stamped registry and its home copies as developer.

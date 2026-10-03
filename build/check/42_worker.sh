@@ -40,7 +40,7 @@ for c in bb bb-app; do
 	fi
 done
 for path in /home/developer/.bb/auth.json /home/developer/.bb-machines \
-	/etc/systemd/system/bb.service /usr/local/share/bb/bb-backup \
+	/etc/systemd/system/bb.service \
 	/home/developer/entrypoint.sh; do
 	[ ! -e "$path" ] || { echo "worker unexpectedly carries $path" >&2; exit 1; }
 done

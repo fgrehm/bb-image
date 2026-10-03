@@ -2,7 +2,7 @@
 
 ## Shared foundation
 
-Every flavor includes sudo with the [human password setup helper](sudo.md), Git, SSH client tooling, shell and archive utilities, mise, `age`/`age-keygen`, the `sqlite3` CLI, and SQLite development files. The package inventories under [`container/`](../container/) and the flavor recipes are the authoritative lists.
+Every flavor includes sudo with the [human password setup helper](sudo.md), Git, SSH client tooling, shell and archive utilities, mise, `bb-backup`, `age`/`age-keygen`, the `sqlite3` CLI, and SQLite development files. `bb-backup` is installed in foundation, including on workers without a bb server; see [Backups](backups.md). The package inventories under [`container/`](../container/) and the flavor recipes are the authoritative lists.
 
 Slim adds bb, Node.js, and lazy agent CLIs without full's browser and development tools. Worker prototypes omit the bb server. The [README flavor table](../README.md#choose-an-image) and [worker guide](workers.md) describe those choices.
 
@@ -11,7 +11,6 @@ Slim adds bb, Node.js, and lazy agent CLIs without full's browser and developmen
 - Node.js, bb, and Playwright with Chromium installed at build time, so the image can serve and drive a browser without a first-run download
 - A baked dev toolset: `rg`, `jq`, `fd`, `shfmt`, `shellcheck`, `tmux`, `git-lfs`, and neovim, which is aliased to `vi` and `vim` for the whole container
 - A native build toolchain, PostgreSQL client/development tools, ImageMagick and image optimizers, and `poppler-utils` with `qpdf` for PDFs
-- `bb-backup`, a baked backup script with four subcommands: `backup` writes explicitly selected sources; `state` discovers bb/plugin data and documented trace roots, supports caller includes and opt-in plugin secrets, verifies archives before publishing, and optionally age-encrypts them; `traces` mirrors agent session traces and logs additively with rsync; `verify` re-runs the integrity check on plaintext `.tar.zst` archives. See [Backups](backups.md)
 - A UTF-8 locale (`LANG=C.UTF-8`) and `EDITOR`/`VISUAL` pointing at `vi`, so `git commit` without `-m` and `git rebase -i` work
 - mise-managed toolchains, agent CLIs, and prek, installed on first use
 - `$HOME` as the working directory, since bb hosts many projects and resolves them by path

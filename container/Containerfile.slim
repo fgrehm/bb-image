@@ -2,7 +2,7 @@
 # slim: the small extensible bb runtime. Node, packaged bb, lazy pnpm and the
 # coding-agent CLIs through mise, the entrypoint, and the hydration machinery.
 # Explicitly not here: Chromium and Playwright, the build toolchain, database
-# clients, media and document tools, the baked dev tools, and backup tooling.
+# clients, media and document tools, and the baked dev tools.
 # Bootstrap sudo is inherited. The node and bb layers are built here rather than
 # shared with full: cache keys follow the parent chain, and full installs its
 # package tier between foundation and node, so the instructions cannot be
@@ -75,12 +75,6 @@ ENV LANG=C.UTF-8
 RUN mkdir -p /home/${USERNAME}/.bb
 
 COPY --chown=$USERNAME:$USERNAME container/entrypoint.sh /home/${USERNAME}/entrypoint.sh
-
-# The hydration registry is stamped by developer with an atomic rename, so its
-# directory, not just the files copied into it, must be developer-owned.
-USER root
-RUN install -d -o "$USERNAME" -g "$USERNAME" /usr/local/share/bb
-USER $USERNAME
 
 # Home hydration. The same registry chain ships to every variant: the shared
 # guidance keeps the wording flavor-neutral, so a volume that moved from one

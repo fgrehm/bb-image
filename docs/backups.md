@@ -1,6 +1,6 @@
 # Backups
 
-`bb-backup` ships in `full`, `vm`, and `exedev`, not slim or worker flavors. The underlying age and SQLite tools are available in every flavor.
+`bb-backup` ships in every flavor: `full`, `slim`, `worker`, `vm`, `exedev`, and `worker-vm`. A worker has no bb server state, but its home can hold enrollment identity, provider logins, and agent traces worth protecting. `state` exits successfully without creating an archive when no state is found. The underlying age and SQLite tools are available in every flavor.
 
 `/usr/local/share/bb/bb-backup` has four subcommands and no default: `backup` (the recovery archive), `state` (the discovered bb profile), `traces` (the additive mirror), and `verify`. A bare `bb-backup` prints usage. It does not schedule anything. Container deployments should call it from a host systemd user timer, a Quadlet, or a compose sidecar cron. The `vm` flavors have systemd and a managed bb service, but deliberately ship no backup timer; a derived VM can add one when its backup destination and retention policy are known.
 

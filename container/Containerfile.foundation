@@ -53,6 +53,11 @@ COPY --chmod=0440 container/sudoers-developer /etc/sudoers.d/developer
 COPY --chmod=0440 container/sudoers-bootstrap /etc/sudoers.d/zz-bb-bootstrap
 COPY --chmod=0755 container/bb-set-password /usr/local/sbin/bb-set-password
 COPY --chmod=0755 container/bb-sudo-reminder /usr/local/bin/bb-sudo-reminder
+# Shared home-independent utilities and hydration registry. The directory is
+# developer-owned because hydration stamps it with an atomic rename.
+RUN install -d -o "$USERNAME" -g "$USERNAME" /usr/local/share/bb
+COPY --chmod=0755 container/bb-backup /usr/local/share/bb/bb-backup
+RUN ln -s /usr/local/share/bb/bb-backup /usr/local/bin/bb-backup
 # System rc files reach existing/user-edited homes without adding managed files
 # to home or changing hydration hashes. No startup policy mutation occurs.
 RUN printf '\n%s\n' \

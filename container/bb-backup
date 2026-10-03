@@ -257,10 +257,10 @@ if [ "$mode" = state ]; then
 		sources="$sources $p"
 	done
 	[ -f "$HOME/.bb/bb.db" ] && sqlite_files="$sqlite_files $HOME/.bb/bb.db"
-	[ "$sources" != '' ] || {
-		echo 'bb-backup: state: no bb state found' >&2
-		exit 1
-	}
+	if [ "$sources" = '' ] && [ "$sqlite_files" = '' ]; then
+		echo 'bb-backup: state: no bb state found, nothing to back up'
+		exit 0
+	fi
 	# The generic source list includes plugin database originals. Their
 	# snapshots are appended at the same paths by the existing archive path.
 fi
@@ -358,7 +358,9 @@ if [ "$mode" = traces ]; then
 	exit 0
 fi
 
-[ "$arg" != '' ] && [ "$sources" != '' ] || usage
+if [ "$arg" = '' ] || { [ "$sources" = '' ] && [ "$sqlite_files" = '' ]; }; then
+	usage
+fi
 output="$arg"
 [ ! -e "$output" ] || [ -d "$output" ] || {
 	echo "bb-backup: output exists and is not a directory: $output" >&2
