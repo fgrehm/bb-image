@@ -1,0 +1,20 @@
+#!/bin/sh
+# Called by interactive shell startup only. Never changes sudo policy.
+[ -t 2 ] || exit 0
+[ "${BB_SUDO_REMINDER:-1}" != 0 ] || exit 0
+[ "$(/usr/bin/id -un)" = developer ] || exit 0
+[ -e /etc/sudoers.d/zz-bb-bootstrap ] || exit 0
+[ ! -e "${XDG_CONFIG_HOME:-$HOME/.config}/bb/sudo-reminder-disabled" ] || exit 0
+
+{
+	printf '%s\n' 'bb-image: bootstrap passwordless sudo is configured for developer.'
+	if /usr/bin/grep -Eq '^NoNewPrivs:[[:space:]]+1$' /proc/self/status; then
+		printf '%s\n' 'Elevation is blocked by this container launch. Password setup needs an elevation-enabled launch.'
+	fi
+	printf '%s\n' 'To set a password and require it for sudo: sudo bb-set-password'
+	printf '%s\n' 'To silence only this reminder: set BB_SUDO_REMINDER=0, or run:'
+	# Show a literal command for the human to run in their own shell.
+	# shellcheck disable=SC2016
+	printf '%s\n' '  mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}/bb" && touch "${XDG_CONFIG_HOME:-$HOME/.config}/bb/sudo-reminder-disabled"'
+} >&2
+exit 0
