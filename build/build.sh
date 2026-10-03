@@ -16,17 +16,7 @@ while IFS= read -r line; do
 	esac
 done <"$pins"
 
-case "$flavor" in
-full | slim | worker) stages="foundation $flavor" ;;
-slim-sudo) stages='foundation slim slim-sudo' ;;
-full-sudo | vm) stages="foundation full $flavor" ;;
-vm-sudo | exedev) stages="foundation full vm $flavor" ;;
-worker-vm) stages='foundation worker worker-vm' ;;
-*)
-	echo "unknown flavor: $flavor" >&2
-	exit 1
-	;;
-esac
+stages="$(sh build/manifest.sh stages "$flavor")"
 
 if [ -n "${GH_TOKEN:-}" ]; then
 	set -- "$@" --secret id=github_token,type=env,env=GH_TOKEN

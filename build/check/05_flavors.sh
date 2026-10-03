@@ -1,30 +1,19 @@
-# Partials sourced by build/check.sh via build/check/lib.sh; IMAGE/TAG/ENGINE,
-# img, root and say/crun come from there (SC2148/SC2153/SC2154 handled here).
+#!/bin/sh
+# Partials sourced by build/check.sh; shared variables/functions come from lib.sh.
 # shellcheck shell=sh disable=SC2154,SC2148
 # shellcheck source=build/check/lib.sh
 # check-scope: repo
 
-# The flavor set is written down in five places and kept in step by hand: the
-# Containerfiles (the real definition), known_flavors in build/check.sh, the case
-# in build/build.sh, the targets in docker-bake.hcl, and the matrix plus FLAVORS
-# in the publish workflow. A flavor added to one and forgotten in another is a
-# silent gap, which is exactly how a new flavor once shipped with no CI at all,
-# so the agreement is asserted rather than trusted.
-say "the flavor set agrees across Containerfiles, harness, build, bake, and workflow"
-containerfiles="$(for f in "$root"/container/Containerfile.*; do
-	name="${f##*.}"
-	[ "$name" = foundation ] || printf '%s\n' "$name"
-done | sort)"
-known="$(sed -n "s/^known_flavors='//p" "$root/build/check.sh" | tr -d "'" | tr ' ' '\n' | sort)"
-build="$(sed -n 's/^\([a-z][a-z| -]*\)) .*/\1/p' "$root/build/build.sh" |
-	tr '|' '\n' | tr -d ' ' | sort -u)"
-bake="$(sed -n 's/^target "\([^"]*\)".*/\1/p' "$root/docker-bake.hcl" |
-	grep -vE '^(_common|foundation)$' | sort)"
-wf_env="$(sed -n 's/^  FLAVORS: //p' "$root/.github/workflows/publish.yml" | tr ' ' '\n' | sort)"
-wf_matrix="$(sed -n 's/^ *- flavor: \([a-z-]*\)$/\1/p' "$root/.github/workflows/publish.yml" | sort)"
-
+say "the manifest drives the published flavor graph and generated targets"
+manifest="$root/container/flavors.tsv"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
+
+manifest_flavors="$(awk -F '\t' '$1 !~ /^#/ && NF >= 6 {print $1}' "$manifest" | sort)"
+containerfiles="$(for f in "$root"/container/Containerfile.*; do printf '%s\n' "${f##*.}"; done | sort)"
+published="$(sh "$root/build/manifest.sh" published | sort)"
+known="$(printf '%s\n' "$known_flavors" | tr ' ' '\n' | sed '/^$/d' | sort)"
+
 same_set() {
 	[ "$2" = "$3" ] && return 0
 	printf '%s\n' "$1" >&2
@@ -34,41 +23,54 @@ same_set() {
 	return 1
 }
 
-rc=0
-same_set "known_flavors in build/check.sh differs from the Containerfile set" \
-	"$containerfiles" "$known" || rc=1
-same_set "the case in build/build.sh differs from the Containerfile set" \
-	"$containerfiles" "$build" || rc=1
-same_set "the targets in docker-bake.hcl differ from the Containerfile set" \
-	"$containerfiles" "$bake" || rc=1
-same_set "FLAVORS in the publish workflow differs from the Containerfile set" \
-	"$containerfiles" "$wf_env" || rc=1
-same_set "the publish matrix differs from the Containerfile set" \
-	"$containerfiles" "$wf_matrix" || rc=1
+[ -n "$known_flavors" ] || {
+	echo "known_flavors is empty" >&2
+	exit 1
+}
+same_set "manifest entries differ from Containerfiles" "$manifest_flavors" "$containerfiles"
+same_set "manifest published entries differ from known_flavors" "$published" "$known"
 
-# The workflow's host-gate lists are separate, narrower sets; keep them honest
-# about being subsets, and keep the boot gate inside the smolvm list, since a
-# flavor cannot run a guest gate without smolvm installed on the runner.
-gate() {
-	sed -n "s/^  $1: //p" "$root/.github/workflows/publish.yml" |
-		tr -d '[]"' | tr -d "'" | tr ',' '\n' | sed '/^$/d' | sort
-}
-smolvm="$(gate SMOLVM_FLAVORS)"
-boot="$(gate BOOT_GATE_FLAVORS)"
-in_set() {
-	for x in $3; do
-		printf '%s\n' "$2" | grep -qxF "$x" || {
-			echo "$1 names '$x', which is not a published flavor" >&2
-			return 1
+bake="$(sh "$root/build/manifest.sh" bake)"
+for flavor in $manifest_flavors; do
+	printf '%s\n' "$bake" | grep -q "^target \"$flavor\" {" || {
+		echo "generated bake lacks target $flavor" >&2
+		exit 1
+	}
+	parent="$(awk -F '\t' -v f="$flavor" '$1 == f {print $2}' "$manifest")"
+	target="$(printf '%s\n' "$bake" | sed -n "/^target \"$flavor\" {/,/^}/p")"
+	if [ "$parent" != - ]; then
+		printf '%s\n' "$target" | grep -Fq "contexts   = { parent = \"target:$parent\" }" || {
+			echo "generated bake target $flavor lacks parent $parent" >&2
+			exit 1
 		}
-	done
+	fi
+done
+
+matrix="$(sh "$root/build/manifest.sh" matrix)"
+printf '%s\n' "$matrix" | jq -e '.include | type == "array"' >/dev/null
+matrix_flavors="$(printf '%s\n' "$matrix" | jq -r '.include[].flavor' | sort)"
+same_set "generated matrix differs from the published set" "$published" "$matrix_flavors"
+printf '%s\n' "$matrix" | jq -e '
+  [.include[] | select(
+    (.flavor == "full" and .suffix == "" and .smolvm == false and .boot == false) or
+    (.flavor == "slim" and .suffix == "-slim" and .smolvm == false and .boot == false) or
+    (.flavor == "slim-sudo" and .suffix == "-slim-sudo" and .smolvm == false and .boot == false) or
+    (.flavor == "full-sudo" and .suffix == "-full-sudo" and .smolvm == false and .boot == false) or
+    (.flavor == "vm" and .suffix == "-vm" and .smolvm == true and .boot == true) or
+    (.flavor == "vm-sudo" and .suffix == "-vm-sudo" and .smolvm == true and .boot == true) or
+    (.flavor == "exedev" and .suffix == "-exedev" and .smolvm == true and .boot == true) or
+    (.flavor == "worker" and .suffix == "-worker" and .smolvm == false and .boot == false) or
+    (.flavor == "worker-vm" and .suffix == "-worker-vm" and .smolvm == true and .boot == false)
+  )] | length == 9
+' >/dev/null
+
+workflow="$root/.github/workflows/publish.yml"
+grep -Fq 'fromJSON(needs.matrix.outputs' "$workflow" || {
+	echo "publish workflow does not consume the generated matrix" >&2
+	exit 1
 }
-in_set "SMOLVM_FLAVORS" "$containerfiles" "$smolvm" || rc=1
-in_set "BOOT_GATE_FLAVORS" "$containerfiles" "$boot" || rc=1
-in_set "BOOT_GATE_FLAVORS (must be inside SMOLVM_FLAVORS)" "$smolvm" "$boot" || rc=1
-[ -n "$smolvm" ] || {
-	echo "SMOLVM_FLAVORS is empty; the workflow conditions would never fire" >&2
-	rc=1
-}
-[ "$rc" = 0 ] || exit 1
-echo "one flavor set, agreed everywhere"
+if grep -Eq '^[[:space:]]*(FLAVORS|SMOLVM_FLAVORS|BOOT_GATE_FLAVORS):' "$workflow"; then
+	echo "publish workflow still declares hardcoded flavor lists" >&2
+	exit 1
+fi
+echo "manifest, generated bake, matrix, and workflow agree"

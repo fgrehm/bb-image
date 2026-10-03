@@ -32,47 +32,29 @@ env:
   # Host gate for the VM flavor. The archive and its checksum are fetched from
   # the matching upstream release rather than piping an installer into CI.
   SMOLVM_VERSION: 1.18.2
-  # The published image family. The Containerfile stages and the check flavors
-  # use the same names; the majority of the steps are identical per flavor.
-  FLAVORS: full slim slim-sudo full-sudo vm vm-sudo exedev worker worker-vm
-  # Host gates. Both need smolvm on the runner; only the flavors whose guest has
-  # an enabled bb.service can run the systemd boot gate. worker-vm boots systemd
-  # and is covered by the rootless Podman gate, which also proves its user
-  # manager and cgroup delegation come up, but has no server to health-check.
-  # make check's flavor-registry check asserts these are subsets of FLAVORS.
-  SMOLVM_FLAVORS: '["vm","vm-sudo","exedev","worker-vm"]'
-  BOOT_GATE_FLAVORS: '["vm","vm-sudo","exedev"]'
+  # Flavor names, tag suffixes, and host gates come from container/flavors.tsv.
 
 jobs:
+  matrix:
+    runs-on: ubuntu-24.04
+    outputs:
+      include: ${{ steps.gen.outputs.include }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: gen
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'include=%s\n' "$(sh build/manifest.sh matrix)" >> "$GITHUB_OUTPUT"
+
   publish:
+    needs: [matrix]
     runs-on: ubuntu-24.04
     strategy:
       # A variant that fails blocks the release: do not publish full while a
       # variant someone depends on failed its own verification.
       fail-fast: false
-      matrix:
-        # The suffix is matrix data, not a metadata-action flavor suffix: an
-        # empty string falls through GitHub's &&/|| ternary idiom, so a global
-        # suffix would garble full as well. Each raw tag carries its own.
-        include:
-          - flavor: full
-            suffix: ""
-          - flavor: slim
-            suffix: -slim
-          - flavor: slim-sudo
-            suffix: -slim-sudo
-          - flavor: full-sudo
-            suffix: -full-sudo
-          - flavor: vm
-            suffix: -vm
-          - flavor: vm-sudo
-            suffix: -vm-sudo
-          - flavor: exedev
-            suffix: -exedev
-          - flavor: worker
-            suffix: -worker
-          - flavor: worker-vm
-            suffix: -worker-vm
+      matrix: ${{ fromJSON(needs.matrix.outputs.include) }}
     permissions:
       contents: write
       packages: write
@@ -150,6 +132,10 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref_type == 'tag' && matrix.flavor == 'full' && !contains(github.ref_name, '-') }}
             type=raw,value=slim,enable=${{ github.ref_type == 'tag' && matrix.flavor == 'slim' && !contains(github.ref_name, '-') }}
 
+      # Generate targets from the same graph as the matrix.
+      - name: Generate Bake file
+        run: sh build/manifest.sh bake > docker-bake.generated.hcl
+
       # Bake gives each Containerfile its parent as a named target context.
       # Only the selected flavor is loaded or pushed; internal parents stay in
       # the builder. Keep tags and labels in one override file for both passes.
@@ -167,7 +153,7 @@ jobs:
         with:
           source: .
           files: |
-            ./docker-bake.hcl
+            ./docker-bake.generated.hcl
             ./docker-bake.meta.json
           targets: ${{ matrix.flavor }}
           set: |
@@ -199,7 +185,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Cache smolvm
-        if: contains(fromJSON(env.SMOLVM_FLAVORS), matrix.flavor)
+        if: matrix.smolvm
         id: smolvm-cache
         uses: actions/cache@v5
         with:
@@ -207,7 +193,7 @@ jobs:
           key: smolvm-${{ runner.os }}-${{ runner.arch }}-${{ env.SMOLVM_VERSION }}
 
       - name: Install smolvm for VM gate
-        if: contains(fromJSON(env.SMOLVM_FLAVORS), matrix.flavor) && steps.smolvm-cache.outputs.cache-hit != 'true'
+        if: matrix.smolvm && steps.smolvm-cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -221,7 +207,7 @@ jobs:
             -C "$HOME/.cache/bb-image/smolvm-${SMOLVM_VERSION}"
 
       - name: Prepare smolvm host
-        if: contains(fromJSON(env.SMOLVM_FLAVORS), matrix.flavor)
+        if: matrix.smolvm
         shell: bash
         run: |
           set -euo pipefail
@@ -230,7 +216,7 @@ jobs:
           echo "$HOME/.cache/bb-image/smolvm-${SMOLVM_VERSION}" >> "$GITHUB_PATH"
 
       - name: Verify VM boot contract
-        if: contains(fromJSON(env.BOOT_GATE_FLAVORS), matrix.flavor)
+        if: matrix.boot
         run: make check-smolvm-systemd ENGINE=docker
         env:
           IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
@@ -238,7 +224,7 @@ jobs:
           FLAVOR: ${{ matrix.flavor }}
 
       - name: Verify rootless Podman CLI
-        if: contains(fromJSON(env.SMOLVM_FLAVORS), matrix.flavor)
+        if: matrix.smolvm
         run: make check-smolvm-podman ENGINE=docker
         env:
           IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
@@ -265,7 +251,7 @@ jobs:
         with:
           source: .
           files: |
-            ./docker-bake.hcl
+            ./docker-bake.generated.hcl
             ./docker-bake.meta.json
           targets: ${{ matrix.flavor }}
           set: |
@@ -307,8 +293,6 @@ jobs:
       - name: List published tags
         id: published
         shell: bash
-        env:
-          FLAVORS: ${{ env.FLAVORS }}
         run: |
           set -euo pipefail
           # The set of tags another variant deduplicates, mirroring the
@@ -317,9 +301,10 @@ jobs:
           stable=true
           if [[ "${GITHUB_REF_NAME}" == *-* ]]; then stable=false; fi
           {
-            for flavor in $FLAVORS; do
-              suffix=""
-              [ "$flavor" = full ] || suffix="-${flavor}"
+            while IFS=$'\t' read -r flavor parent published suffix smolvm boot; do
+              [[ "$flavor" =~ ^#|^$ ]] && continue
+              [ "$published" = yes ] || continue
+              [ "$suffix" = - ] && suffix=""
               echo "img-${IMAGE_VERSION}${suffix}"
               # bb aliases, latest, slim: stable tags only. full is unsuffixed.
               if $stable; then
@@ -328,7 +313,7 @@ jobs:
                 if [ "$flavor" = full ]; then echo "latest"; fi
                 if [ "$flavor" = slim ]; then echo "slim"; fi
               fi
-            done
+            done < container/flavors.tsv
           } | sort -u | grep -v '^$' > /tmp/names.txt
 
           # If any single job failed the release job never starts, but a main

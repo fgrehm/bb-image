@@ -27,10 +27,8 @@ export root
 # shellcheck source=build/check/lib.sh
 . "$here/check/lib.sh"
 
-# Flavors the harness knows about. Grows as the Containerfile grows targets;
-# a flavor listed here without a matching image is caught by the run itself,
-# while an unknown flavor below means a typo in a fragment declaration.
-known_flavors='full slim slim-sudo full-sudo vm vm-sudo exedev worker worker-vm'
+# Published flavors are derived from the same graph used by the build and CI.
+known_flavors="$(sh "$root/build/manifest.sh" published | tr '\n' ' ')"
 
 # The matrix job that also carries the repo-scope fragments (see the header).
 # full is always in the publish matrix, and it is the flavor with gitleaks,
