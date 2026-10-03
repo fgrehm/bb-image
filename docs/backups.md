@@ -27,6 +27,8 @@ Repeat `--include PATH` to add existing files or directories. State exclusion pa
 
 `--include-secrets` opts plugin secrets into automatic selection. It does not require encryption, so request `--age-recipient` when these credentials must not be published as plaintext.
 
+**State backups are sensitive even without `--include-secrets`.** The core SQLite database can contain credentials in plugin KV, including bb account credentials in 0.45.0 and Connect credentials in earlier releases. Excluding filesystem `secrets/` directories does not remove secrets embedded in the database. Use `--age-recipient` for destinations that should not receive plaintext credentials; snapshots preserve the recovery database rather than redacting it.
+
 Source, include, and SQLite path lists do not support whitespace, even when command-line arguments are quoted. This limitation also affects discovered paths and trace sources. Keep output and temporary staging outside the selected source trees to avoid archiving backup artifacts. Use explicit `backup` mode when the state profile's exclusions do not fit your layout.
 
 ### Encryption and output

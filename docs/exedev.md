@@ -29,6 +29,15 @@ ss -ltnp | grep ':3000'
 curl -fsS http://127.0.0.1:3000/api/v1/hosts
 ```
 
+bb 0.45.0 requires the proxy hostname to be configured for DNS-rebinding protection. Run this inside the guest as `developer`, substituting the actual VM hostname, then restart the service:
+
+```bash
+bb-app config set BB_APP_URL https://my-bb.exe.xyz
+sudo systemctl restart bb.service
+```
+
+The VM service can alternatively read `BB_APP_URL` from `/etc/default/bb`. Do not bake a shared hostname into the image. Loopback health checks alone do not verify that the public hostname is accepted.
+
 Configure the root HTTP proxy target explicitly before testing HTTPS access:
 
 ```bash

@@ -11,7 +11,7 @@ ARG USER_UID=1000
 ARG USER_GID=1000
 ARG MISE_VERSION=2026.9.14
 ARG BB_NODE_VERSION=24.21.0
-ARG BB_VERSION=0.44.0
+ARG BB_VERSION=0.45.0
 ARG PLAYWRIGHT_VERSION=1.63.0
 # A scratch dir every downloading RUN points its caches at and deletes before it
 # ends, ARG rather than ENV so none of it lands in the runtime environment; the

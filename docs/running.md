@@ -12,6 +12,22 @@ make ci      # build + verify in one target (what release CI runs)
 
 bb's default port is 38886. If something else on your machine already owns it, pass another: `make run BB_PORT=39886`. It is published on `127.0.0.1` only, so it is not reachable from other machines; `make run BB_BIND=0.0.0.0` changes that, and then you should reach it by IPv4 address rather than `localhost` for the [rootless networking behavior](tooling.md#gotchas).
 
+## Custom DNS and reverse proxies
+
+bb 0.45.0 rejects requests with an unconfigured DNS hostname. Localhost and literal IP access still work. Before using a custom hostname, run this as `developer` in the deployment, using its actual public URL:
+
+```bash
+bb-app config set BB_APP_URL https://bb.example.com
+```
+
+Restart bb through its normal supervisor afterward (recreate the container with the same home volume, or restart `bb.service` in a VM). For a VM, `/etc/default/bb` can also supply `BB_APP_URL` to the service. Matching proxy Host/Origin headers alone do not authorize an arbitrary hostname. `BB_BIND` only selects the container's host-side bind address, not an allowed request hostname. Do not bake a deployment URL into a shared image. See the [exe.dev setup](exedev.md) for its proxy hostname.
+
+## Upgrading to bb 0.45.0
+
+Take a [recovery backup](backups.md#explicit-backup-and-restore) before upgrading persistent state. Test with a disposable copy of the old state first; reverting the image tag against an already migrated database is not a safe rollback plan. Validate enrolled workers reconnect after the server upgrade, including their private runtime update and restart recovery.
+
+bb account/cloud AI can become ready through existing Connect credentials and is preferred by automatic AI routing when available. Review service selections if you do not want titles, commit inputs or voice recordings sent to bb cloud; `bb ai off` persists that choice without signing the account out. See the [bb 0.45.0 release notes](https://github.com/get-bb/bb/blob/98f1c988777612723cc198e776ef407e2b6836ea/CHANGELOG.md).
+
 ## The same thing without make
 
 This uses the local `bb:dev` tag produced by `make build`. To use a published image instead, replace it with `ghcr.io/fgrehm/bb:latest`.
