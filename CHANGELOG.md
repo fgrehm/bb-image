@@ -15,6 +15,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- Bump the baked bb release from 0.44.0 to 0.45.0. Custom DNS and reverse-proxy deployments must configure their public hostname with `BB_APP_URL` for the new DNS-rebinding protection. The release also changes the worker protocol and adds bb account/cloud AI services; back up persistent state before upgrading and verify enrolled workers reconnect. Worker images still fetch their private runtime from the server, not this version pin.
 - Refresh the pinned Debian 13 base to the current linux/amd64 image manifest.
 - Keep SSH tooling in `exedev` but disable its guest SSH service and socket while checking exe.dev-provided access. Remove the `EXPOSE 3000` declaration so exe.dev does not automatically select bb as the root HTTP proxy target, and remove the login-user label pending a live VM check. The proxy can be configured explicitly and remains private by default; `EXPOSE` selects the target but is not a firewall.
 
