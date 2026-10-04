@@ -174,4 +174,8 @@ RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=04
            XDG_STATE_HOME="$BUILD_SCRATCH/state"; \
     mise install \
     && mise reshim --force \
-    && rm -rf "$BUILD_SCRATCH" "/home/${USERNAME}/.cache" "/home/${USERNAME}/.local"
+    && rm -rf "$BUILD_SCRATCH" "/home/${USERNAME}/.cache" "/home/${USERNAME}/.local" \
+    && printf 'node=%s\n' "$BB_NODE_VERSION" > /usr/local/share/bb/baked-versions
+
+COPY --chmod=0755 container/bb-image-info /usr/local/bin/bb-image-info
+LABEL sh.bb.baked.node="$BB_NODE_VERSION"

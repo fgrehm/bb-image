@@ -1,0 +1,23 @@
+#!/bin/sh
+set -eu
+
+versions=/usr/local/share/bb/baked-versions
+if [ -r "$versions" ]; then
+	printf 'Baked image versions:\n'
+	cat "$versions"
+else
+	echo "baked version manifest missing: $versions" >&2
+	exit 1
+fi
+
+node_version="$(sed -n 's/^node = "\(.*\)"$/\1/p' /opt/mise/config.toml | head -n 1)"
+node_dir="${MISE_DATA_DIR:-/opt/mise}/installs/node/$node_version"
+package="$node_dir/lib/node_modules/bb-app/package.json"
+if [ -n "$node_version" ] && [ -r "$package" ]; then
+	runtime_bb="$("$node_dir/bin/node" -e 'process.stdout.write(JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).version)' "$package")"
+	printf 'running bb package: %s\n' "$runtime_bb"
+else
+	printf '%s\n' 'running bb package: not installed (no bb server in this flavor)'
+fi
+
+printf '%s\n' 'Informational only. Use bb-app start --bundled to run the baked version.'

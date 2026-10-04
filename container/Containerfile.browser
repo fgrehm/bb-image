@@ -29,8 +29,10 @@ RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=04
 USER root
 RUN playwright install --with-deps chromium \
     && rm -rf /var/lib/apt/lists/* \
-    && chown -R "$USERNAME:$USERNAME" /opt/ms-playwright
+    && chown -R "$USERNAME:$USERNAME" /opt/ms-playwright \
+    && printf 'playwright=%s\n' "$PLAYWRIGHT_VERSION" >> /usr/local/share/bb/baked-versions
 USER $USERNAME
 
 COPY container/fonts.conf /usr/local/share/bb/fonts.conf
 ENV FONTCONFIG_FILE=/usr/local/share/bb/fonts.conf
+LABEL sh.bb.baked.playwright="$PLAYWRIGHT_VERSION"
