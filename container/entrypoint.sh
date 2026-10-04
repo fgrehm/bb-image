@@ -30,6 +30,7 @@ tail_pid=$!
 # Default to serving bb. Callers can pass their own command instead.
 if [ "$#" -eq 0 ]; then
 	set -- bb-app \
+		--in-app-updates \
 		--server-bind-host "${BB_SERVER_BIND_HOST:-0.0.0.0}" \
 		--server-port "${BB_SERVER_PORT:-38886}"
 fi

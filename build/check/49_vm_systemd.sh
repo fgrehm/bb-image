@@ -34,7 +34,7 @@ unit="$(cat /etc/systemd/system/bb.service)"
 printf '%s\n' "$unit" | grep -qx 'User=developer'
 printf '%s\n' "$unit" | grep -qx 'WorkingDirectory=/home/developer'
 printf '%s\n' "$unit" | grep -qx 'ExecStartPre=/usr/local/share/bb/hydrate-home.sh install'
-printf '%s\n' "$unit" | grep -qx 'ExecStart=/opt/mise/shims/bb-app --server-bind-host 0.0.0.0 --server-port 38886'
+printf '%s\n' "$unit" | grep -qx 'ExecStart=/opt/mise/shims/bb-app --in-app-updates --server-bind-host 0.0.0.0 --server-port 38886'
 printf '%s\n' "$unit" | grep -qx 'WantedBy=multi-user.target'
 
 [ ! -s /etc/machine-id ] || {

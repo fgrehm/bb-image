@@ -28,6 +28,10 @@ Take a [recovery backup](backups.md#explicit-backup-and-restore) before upgradin
 
 bb account/cloud AI can become ready through existing Connect credentials and is preferred by automatic AI routing when available. Review service selections if you do not want titles, commit inputs or voice recordings sent to bb cloud; `bb ai off` persists that choice without signing the account out. See the [bb 0.45.0 release notes](https://github.com/get-bb/bb/blob/98f1c988777612723cc198e776ef407e2b6836ea/CHANGELOG.md).
 
+## Updating bb within an image
+
+The server starts with `--in-app-updates`, so updates are available in Settings > Updates and through `bb updates app apply`. This updates bb inside the persistent home volume at `~/.bb/app-versions`; it does not replace the container or image. Back up state before updating. Installed app versions consume volume space, and bb does not automatically roll back a failed update. Use `bb-app start --bundled` to run the version baked into the image for recovery or to pin execution to that version. Check the baked and installed versions with `bb-image-info`.
+
 ## The same thing without make
 
 This uses the local `bb:dev` tag produced by `make build`. To use a published image instead, replace it with `ghcr.io/fgrehm/bb:latest`.

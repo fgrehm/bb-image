@@ -2,6 +2,8 @@
 
 The `worker` and `worker-vm` flavors are published images for running manually enrolled execution machines, with `-worker` and `-worker-vm` tag suffixes (for example `edge-worker` and `0.44.0-worker-vm`). They contain Node.js, npm, mise, Playwright + Chromium, lazy coding-agent CLIs, and `bb-backup`, but no baked BB server, host daemon, machine credentials, or enrollment hook. BB's [machine installer](https://github.com/get-bb/bb/blob/main/apps/server/src/assets/install-machine.sh) downloads the server's host-only build into its own private data directory after you explicitly enroll a machine. See [BB's multi-device guide](https://github.com/get-bb/bb/blob/main/docs/multiple-devices.md) for the enrollment flow and server connectivity requirements.
 
+The server's host-daemon `--auto-update` setting controls worker runtime updates; the worker image's bb server update flag does not enable or control those updates. Validate worker reconnect and restart behavior when changing the server's update policy.
+
 `bb-backup state` succeeds without creating an archive when the worker has no bb state. After manual enrollment, include the worker identity explicitly and mirror agent traces to a destination outside the home volume:
 
 ```bash

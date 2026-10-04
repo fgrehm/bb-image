@@ -18,7 +18,7 @@ Environment=PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
 Environment=FONTCONFIG_FILE=/usr/local/share/bb/fonts.conf
 EnvironmentFile=-/etc/default/bb
 ExecStartPre=/usr/local/share/bb/hydrate-home.sh install
-ExecStart=/opt/mise/shims/bb-app --server-bind-host 0.0.0.0 --server-port 3000
+ExecStart=/opt/mise/shims/bb-app --in-app-updates --server-bind-host 0.0.0.0 --server-port 3000
 Restart=on-failure
 RestartSec=2s
 TimeoutStopSec=20s

@@ -34,7 +34,7 @@ bb-app config set BB_APP_URL https://my-bb.exe.xyz
 sudo systemctl restart bb.service
 ```
 
-The VM service can alternatively read `BB_APP_URL` from `/etc/default/bb`. Do not bake a shared hostname into the image. Loopback health checks alone do not verify that the public hostname is accepted.
+The VM service can alternatively read `BB_APP_URL` from `/etc/default/bb`. Do not bake a shared hostname into the image. Loopback health checks alone do not verify that the public hostname is accepted. The service enables bb's in-app update channel; see [Updating bb within an image](running.md#updating-bb-within-an-image) for applying updates, backing up first, and returning to the baked version.
 
 Configure the root HTTP proxy target explicitly before testing HTTPS access:
 

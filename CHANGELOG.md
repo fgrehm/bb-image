@@ -8,6 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- Enable bb's in-app update channel for server images. Updates install into persistent home state; `bb-app start --bundled` runs the baked version, and `bb-image-info` reports baked and installed versions.
 - Ship `bb-backup` in every flavor, including slim and the BB-free worker images. A worker's enrollment identity and agent traces can be backed up without a bb server; an empty state profile is a successful no-op.
 - Interactive bash/zsh reminders for bootstrap passwordless sudo, with deployment-wide `BB_SUDO_REMINDER=0` and per-user suppression. Suppression does not change sudo permissions; noninteractive commands stay quiet.
 - Publish and verify the `worker` and `worker-vm` image flavors, with separate `-worker` and `-worker-vm` tags. Both worker flavors include Playwright and Chromium for browser-based tasks, along with the fontconfig override that keeps sandboxed browser launches off the root-owned system font cache.

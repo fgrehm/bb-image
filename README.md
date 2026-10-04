@@ -17,6 +17,8 @@ All flavors share sudo (initially passwordless for `developer`), `bb-backup`, `a
 
 Full keeps unsuffixed tags. `latest` and `slim` are moving aliases; VM, exe.dev, and worker flavors have no bare moving aliases. All flavors initially grant passwordless sudo. Standard Makefile container launches block it with `no-new-privileges`; use `make run FLAVOR=full SECURITY_OPTS=` to permit container elevation on any container flavor. Direct engine launches must pass the no-new-privileges flag explicitly to block elevation. VM images permit guest sudo and require smolvm's default VM-grade workload profile rather than `--unprivileged`. Use `sudo bb-set-password` to require a password, as described in [sudo setup and recovery](docs/sudo.md). These changes are [Unreleased](CHANGELOG.md#unreleased); older pinned tags retain their original policy. The `exedev` flavor is for [exe.dev](https://exe.dev/docs/customization); it keeps guest SSH disabled and does not set the default proxy port until exe.dev access is verified. See [running and security options](docs/running.md), [running as a microVM](docs/smolvm.md), and [tag policy](docs/publishing.md).
 
+Server flavors enable bb's in-app update channel. Updates install into persistent home state, so back up before applying one; `bb-app start --bundled` runs the baked version. See [updating bb within an image](docs/running.md#updating-bb-within-an-image).
+
 ## Run it as a container
 
 ```bash

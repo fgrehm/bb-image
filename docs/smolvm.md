@@ -20,6 +20,8 @@ The example follows `edge-vm`. All VM flavors initially permit passwordless sudo
 
 Use smolvm's default VM-grade image profile. Do not add `--unprivileged`: that option deliberately removes capabilities, writable cgroups, and mounts that init systems need. The microVM is the isolation boundary. Guest root can access credentials and explicitly shared resources; do not mount a host container-engine socket or broad sensitive host paths into any flavor by default.
 
+`bb.service` starts bb with in-app updates enabled. Updating through Settings > Updates or `bb updates app apply` installs into the persistent VM home at `~/.bb/app-versions`; back up before applying an update. Use `bb-app start --bundled` to return to the version baked into the image. See [Updating bb within an image](running.md#updating-bb-within-an-image) for rollback limits and version reporting.
+
 ## Rootless Podman CLI
 
 The `vm` family (`vm` and `exedev`) and the local `worker-vm` prototype include Podman for commands run as `developer`. There is **no Podman API socket or daemon endpoint**. The CLI uses rootless user namespaces and stores pulled images and containers under `/home/developer/.local/share/containers`; that storage persists on the VM disk and consumes its space. Check usage with `podman system df`; remove only data you no longer need with `podman system prune`.

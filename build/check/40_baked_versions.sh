@@ -20,5 +20,9 @@ set -eu
 	{ echo "node version is $(node --version), expected v$BB_NODE_VERSION" >&2; exit 1; }
 [ "$(playwright --version 2>/dev/null | grep -oE 'Version [0-9.]+' | cut -d' ' -f2)" = "$PLAYWRIGHT_VERSION" ] ||
 	{ echo "playwright $(playwright --version), expected $PLAYWRIGHT_VERSION" >&2; exit 1; }
-echo "bb $BB_VERSION, node v$BB_NODE_VERSION, playwright $PLAYWRIGHT_VERSION, all matching"
+bb-app start --help 2>&1 | grep -F -- --in-app-updates >/dev/null || {
+	echo "bb-app does not advertise --in-app-updates" >&2
+	exit 1
+}
+echo "bb $BB_VERSION, node v$BB_NODE_VERSION, playwright $PLAYWRIGHT_VERSION, all matching; in-app updates supported"
 SH
