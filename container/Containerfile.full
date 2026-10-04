@@ -5,14 +5,13 @@
 # what foundation carries (container/packages-full.txt).
 # ---------------------------------------------------------------------------
 
-ARG BASE_IMAGE=localhost/bb-stage-foundation:dev
+ARG BASE_IMAGE=localhost/bb-stage-browser:dev
 FROM ${BASE_IMAGE} AS full
 
 ARG DEBIAN_FRONTEND
 ARG USERNAME
 ARG BUILD_SCRATCH
 ARG BB_VERSION
-ARG PLAYWRIGHT_VERSION
 
 # foundation left off as the unprivileged user; the package tier full adds is
 # root's to install, and the stage steps back down before any of the layers
@@ -25,39 +24,9 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* /tmp/packages-full.txt
 USER $USERNAME
 
-# GitHub token, optional. mise resolves versions and verifies artifact attestations
-# through api.github.com, which serves 60 requests per hour unauthenticated against 1000
-# with a token, so builds fail intermittently without one.
-#
-# The token arrives as a BuildKit secret and lives only for the duration of a RUN. It is
-# never a build arg and never an ENV, because both persist in image metadata, and it is
-# never echoed, because podman does not redact secrets from build output the way BuildKit
-# does. The file form is deliberate: reading it with `cat` and matching it with `grep -f`
-# keeps the value out of every process argument list. required=false keeps an ordinary
-# local build, with no token at all, working.
-#
-# uid, gid and mode are load-bearing here (or rather, they matter). The toolset RUNs run as
-# the unprivileged developer, and a secret mounted with default permissions is unreadable
-# to it. `cat` then fails inside a command substitution, which does not trip `set -e`, so
-# the build continues with an empty token and mise quietly stays unauthenticated. That
-# failure mode looks exactly like the rate limiting it was meant to fix. Keep 1000 in step
-# with USER_UID.
-#
-# The token does not reach the image: the token leak scan in build/check.sh runs
-# against the built image at verification time, before a release is pushed.
-
-# node is the runtime the image is built around. The version was declared at the
-# top and baked into the bootstrap config by foundation; this RUN installs it.
-RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=0400 \
-    if [ -s /run/secrets/github_token ]; then \
-      export MISE_GITHUB_TOKEN="$(cat /run/secrets/github_token)"; \
-    fi; \
-    export npm_config_cache="$BUILD_SCRATCH/npm" \
-           XDG_CACHE_HOME="$BUILD_SCRATCH/cache" \
-           XDG_STATE_HOME="$BUILD_SCRATCH/state"; \
-    mise install \
-    && mise reshim --force \
-    && rm -rf "$BUILD_SCRATCH"
+# GitHub token handling and authenticated Node setup live in foundation, where
+# the runtime is installed once for every flavor. Later toolset operations retain the
+# same secret mount and scratch-cache discipline described in the project rules.
 
 # bb is installed globally into mise's node install, so bumping the node version
 # above means reinstalling it. npm gates native-addon install scripts, so the
@@ -75,31 +44,6 @@ RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=04
         "bb-app@${BB_VERSION}" \
     && mise reshim --force \
     && rm -rf "$BUILD_SCRATCH"
-
-# Playwright's Chromium, ready to use without a first-run download. Browsers go to
-# /opt/ms-playwright, outside home, for the same reason as the toolchain: a
-# volume-backed home would otherwise copy ~170MB into the volume at first boot.
-#
-# It is an npm global rather than a mise tool so that the browser download sits in
-# a layer toolset edits do not invalidate, and because `install --with-deps` needs
-# root, which the toolset layers deliberately are not.
-ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
-RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=0400 \
-    if [ -s /run/secrets/github_token ]; then \
-      export MISE_GITHUB_TOKEN="$(cat /run/secrets/github_token)"; \
-    fi; \
-    export npm_config_cache="$BUILD_SCRATCH/npm" \
-           XDG_CACHE_HOME="$BUILD_SCRATCH/cache" \
-           XDG_STATE_HOME="$BUILD_SCRATCH/state"; \
-    npm install -g "playwright@${PLAYWRIGHT_VERSION}" \
-    && mise reshim --force \
-    && rm -rf "$BUILD_SCRATCH"
-
-USER root
-RUN playwright install --with-deps chromium \
-    && rm -rf /var/lib/apt/lists/* \
-    && chown -R $USERNAME:$USERNAME /opt/ms-playwright
-USER $USERNAME
 
 # ~/.bb holds server state. It is created in the image so the copy-up into a home
 # volume carries the right uid/gid: a volume created empty would be root-owned
@@ -175,9 +119,6 @@ RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=04
 # passes Playwright's launch({ env }) option replaces that environment wholesale
 # and has to carry FONTCONFIG_FILE across itself.
 
-COPY container/fonts.conf /usr/local/share/bb/fonts.conf
-ENV FONTCONFIG_FILE=/usr/local/share/bb/fonts.conf
-
 # A font package bump that moved the distro file out from under this copy would
 # silently drop font directories and alias rules, so the comparison against the
 # distro file is a release gate. It lives in container/fontconfig.sh, next to the
@@ -185,12 +126,8 @@ ENV FONTCONFIG_FILE=/usr/local/share/bb/fonts.conf
 # before an image is pushed, and make fonts-regen regenerates this file. Nothing
 # verification-shaped lives in this Containerfile; every RUN builds, none assert.
 
-# LANG is unset in the base image and LC_CTYPE lands on POSIX, which shows up as
-# encoding trouble in anything that prints non-ASCII. C.UTF-8 needs no locales
-# package on Debian 13.
 # git reaches for $EDITOR for `git commit` without -m and for `git rebase -i`.
-ENV LANG=C.UTF-8 \
-    EDITOR=vi \
+ENV EDITOR=vi \
     VISUAL=vi
 
 USER root

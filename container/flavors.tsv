@@ -1,9 +1,10 @@
 # bb-image flavor graph. Columns, tab-separated:
 # flavor	parent	published	suffix	smolvm	boot
 foundation	-	no	-	no	no
-full	foundation	yes	-	no	no
+browser	foundation	no	-	no	no
 slim	foundation	yes	-slim	no	no
+worker	browser	yes	-worker	no	no
+full	browser	yes	-	no	no
 vm	full	yes	-vm	yes	yes
 exedev	vm	yes	-exedev	yes	yes
-worker	foundation	yes	-worker	no	no
 worker-vm	worker	yes	-worker-vm	yes	no

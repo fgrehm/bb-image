@@ -1,0 +1,36 @@
+# ---------------------------------------------------------------------------
+# browser: the shared Playwright and Chromium runtime for full and worker.
+# Internal only; it inherits the common Node runtime from foundation and does
+# not own a variant toolset or published flavor identity.
+# ---------------------------------------------------------------------------
+
+ARG BASE_IMAGE=localhost/bb-stage-foundation:dev
+FROM ${BASE_IMAGE} AS browser
+
+ARG USERNAME
+ARG BUILD_SCRATCH
+ARG PLAYWRIGHT_VERSION
+
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
+RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=0400 \
+    set -e; \
+    if [ -s /run/secrets/github_token ]; then \
+      export MISE_GITHUB_TOKEN="$(cat /run/secrets/github_token)"; \
+    fi; \
+    export npm_config_cache="$BUILD_SCRATCH/npm" \
+           XDG_CACHE_HOME="$BUILD_SCRATCH/cache" \
+           XDG_STATE_HOME="$BUILD_SCRATCH/state"; \
+    npm install -g "playwright@${PLAYWRIGHT_VERSION}" \
+    && mise reshim --force \
+    && rm -rf "$BUILD_SCRATCH" "/home/${USERNAME}/.cache" "/home/${USERNAME}/.local" \
+    && install -d -o "$USERNAME" -g "$USERNAME" \
+        "/home/${USERNAME}/.cache" "/home/${USERNAME}/.local"
+
+USER root
+RUN playwright install --with-deps chromium \
+    && rm -rf /var/lib/apt/lists/* \
+    && chown -R "$USERNAME:$USERNAME" /opt/ms-playwright
+USER $USERNAME
+
+COPY container/fonts.conf /usr/local/share/bb/fonts.conf
+ENV FONTCONFIG_FILE=/usr/local/share/bb/fonts.conf

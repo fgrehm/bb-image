@@ -34,6 +34,7 @@ ARG USER_UID
 ARG USER_GID
 ARG MISE_VERSION
 ARG BB_NODE_VERSION
+ARG BUILD_SCRATCH
 
 # The package list is a file so the inventory is diffable and reviewable on its
 # own; the file carries the rationale comments. It is copied into /tmp and
@@ -102,7 +103,8 @@ ENV MISE_DATA_DIR=/opt/mise \
 # each variant's mise config so mise-managed commands remain correct when a
 # derived image renames the user. Such images should redeclare these ENVs too if
 # raw execs need renamed-home paths.
-ENV TMPDIR=/tmp \
+ENV LANG=C.UTF-8 \
+    TMPDIR=/tmp \
     npm_config_cache=/home/developer/.cache/npm \
     pnpm_config_store_dir=/home/developer/.cache/pnpm-store \
     npm_config_store_dir=/home/developer/.cache/pnpm-store \
@@ -158,3 +160,18 @@ USER $USERNAME
 # bb hosts many projects and resolves them by path, so home is the sane default
 # rather than a single mount point. Mount a tree under it (see the Makefile).
 WORKDIR /home/${USERNAME}
+
+# Install Node once for every child, before any variant toolset is copied in.
+# The secret must be readable by developer. All download/state caches live in
+# this RUN's scratch directory; deleting them in a later layer reclaims nothing.
+RUN --mount=type=secret,id=github_token,required=false,uid=1000,gid=1000,mode=0400 \
+    set -e; \
+    if [ -s /run/secrets/github_token ]; then \
+      export MISE_GITHUB_TOKEN="$(cat /run/secrets/github_token)"; \
+    fi; \
+    export npm_config_cache="$BUILD_SCRATCH/npm" \
+           XDG_CACHE_HOME="$BUILD_SCRATCH/cache" \
+           XDG_STATE_HOME="$BUILD_SCRATCH/state"; \
+    mise install \
+    && mise reshim --force \
+    && rm -rf "$BUILD_SCRATCH" "/home/${USERNAME}/.cache" "/home/${USERNAME}/.local"

@@ -67,4 +67,38 @@ while IFS="$(printf '\t')" read -r flavor _ _ _ _ _; do
 	fi
 done <"$tmp/rows"
 
-echo "recipe parents and build chains agree with the manifest"
+# Node is installed in the common foundation before any child toolset is copied.
+grep -Fq 'mise install' "$root/container/Containerfile.foundation" || {
+	echo "foundation does not install Node" >&2
+	exit 1
+}
+for flavor in slim worker full; do
+	sed '/COPY .*mise.*toml/,$d' "$root/container/Containerfile.$flavor" |
+		if grep -Fq 'mise install'; then
+			echo "$flavor installs Node before copying its toolset" >&2
+			exit 1
+		fi
+done
+
+browser="$root/container/Containerfile.browser"
+if grep -Eq 'COPY .*mise.*toml|LABEL sh\.bb\.flavor' "$browser"; then
+	echo "browser must not own a toolset config or published flavor identity" >&2
+	exit 1
+fi
+if grep -Fq 'npm install -g "playwright@' "$root/container/Containerfile.full" ||
+	grep -Fq 'playwright install' "$root/container/Containerfile.full"; then
+	echo "full installs a browser instead of inheriting the browser stage" >&2
+	exit 1
+fi
+grep -Fq 'container/bb-backup' "$root/container/Containerfile.foundation" || {
+	echo "foundation does not install bb-backup" >&2
+	exit 1
+}
+
+# Slim stays free of the shared browser artifacts.
+if grep -Fq 'FONTCONFIG_FILE' "$root/container/Containerfile.slim"; then
+	echo "slim sets FONTCONFIG_FILE" >&2
+	exit 1
+fi
+
+echo "recipe parents, layer boundaries, and build chains agree with the manifest"
