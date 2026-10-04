@@ -2,9 +2,9 @@
 
 ## Shared foundation
 
-Every flavor includes sudo with the [human password setup helper](sudo.md), Git, SSH client tooling, shell and archive utilities, mise, `bb-backup`, `age`/`age-keygen`, the `sqlite3` CLI, and SQLite development files. `bb-backup` is installed in foundation, including on workers without a bb server; see [Backups](backups.md). The package inventories under [`container/`](../container/) and the flavor recipes are the authoritative lists.
+Every flavor includes sudo with the [human password setup helper](sudo.md), Git, SSH client tooling, shell and archive utilities, mise, Node.js, `bb-backup`, `age`/`age-keygen`, the `sqlite3` CLI, and SQLite development files. The internal foundation installs Node once for all flavors. `bb-backup` is installed in foundation, including on workers without a bb server; see [Backups](backups.md). The package inventories under [`container/`](../container/) and the flavor recipes are the authoritative lists.
 
-Slim adds bb, Node.js, and lazy agent CLIs without full's browser and development tools. Worker prototypes omit the bb server. The [README flavor table](../README.md#choose-an-image) and [worker guide](workers.md) describe those choices.
+Slim adds bb and lazy agent CLIs without the browser layer or full's development packages, keeping its footprint smaller for deployments that do not need Chromium or the larger toolset. Full and worker share one internal browser layer; workers omit the bb server. `bb-image-info` reports baked versions and, when bb is installed, the runtime version. The [README flavor table](../README.md#choose-an-image) and [worker guide](workers.md) describe those choices.
 
 ## What's added in the full image
 
@@ -20,7 +20,7 @@ Slim adds bb, Node.js, and lazy agent CLIs without full's browser and developmen
 
 ## Lazy tool loading
 
-The image follows Omarchy's [lazy-loading mise stubs](https://omarchy.org/manual/development-tools/): rather than baking in every toolchain, it ships mise shims and lets a tool install itself the first time you call it.
+The image follows Omarchy's [lazy-loading mise stubs](https://omarchy.org/manual/development-tools/): rather than baking in every toolchain, it ships mise shims and lets a tool install itself the first time you call it. Node.js is an exception, installed in foundation so every flavor shares the same pinned runtime; Playwright and Chromium are installed once in the browser layer inherited by full and worker.
 
 The toolset is `mise.toml` in this repo, installed into the image as the global mise config at `/opt/mise/config.toml`. Tools declared `lazy = true` receive bootstrap shims at build time; the baked developer tools are installed during the build instead. The first call to `go`, `python`, or `claude` installs that tool, then runs it.
 

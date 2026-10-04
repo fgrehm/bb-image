@@ -35,7 +35,7 @@ make ci FLAVOR=worker-vm TAG=worker-vm
 make check-smolvm-podman FLAVOR=worker-vm TAG=worker-vm
 ```
 
-CI runs `make check-smolvm-podman` against `worker-vm` (`SMOLVM_FLAVORS` in the publish workflow), so the guest's systemd boot, `user@1000` manager, linger and rootless Podman are exercised on every build. It is deliberately **not** in `BOOT_GATE_FLAVORS`: that gate waits for bb's API, and `worker-vm` has no server to health-check.
+The publish workflow derives host gates from `container/flavors.tsv` and runs `make check-smolvm-podman` against `worker-vm`, so the guest's systemd boot, `user@1000` manager, linger and rootless Podman are exercised on every build. The systemd API boot gate does not include `worker-vm`, because that flavor has no bb server to health-check.
 
 Boot `bb:worker-vm` with smolvm's default VM-grade profile and a persistent disk, as described in [Running as a microVM](smolvm.md). Use a private Smolfile pointing at your **local** image or a local image archive; the repository's existing example points at a published BB server image and expects an API on port 38886. No `bb.service` is enabled in this worker target. The VM boots systemd and enables lingering for `developer` so its user manager can run an installer-created service after **manual** enrollment. Run the one-line installer as `developer`, not root, and verify `systemctl --user` is available and the installed `bb-host-daemon-*.service` is active. If the user manager is unavailable, the installer falls back to a detached daemon instead.
 

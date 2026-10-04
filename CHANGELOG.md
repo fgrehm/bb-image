@@ -8,8 +8,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
-- Enable bb's in-app update channel for server images. Updates install into persistent home state; `bb-app start --bundled` runs the baked version, and `bb-image-info` reports baked and installed versions.
 - Ship `bb-backup` in every flavor, including slim and the BB-free worker images. A worker's enrollment identity and agent traces can be backed up without a bb server; an empty state profile is a successful no-op.
+- Report baked Node, Playwright, and bb versions through OCI labels, `/usr/local/share/bb/baked-versions`, and `bb-image-info`, which also reports the installed bb version when present.
+- Enable bb's in-app update channel for server images. Updates install into persistent home state; `bb-app start --bundled` runs the baked version, and `bb-image-info` reports baked and installed versions.
 - Interactive bash/zsh reminders for bootstrap passwordless sudo, with deployment-wide `BB_SUDO_REMINDER=0` and per-user suppression. Suppression does not change sudo permissions; noninteractive commands stay quiet.
 - Publish and verify the `worker` and `worker-vm` image flavors, with separate `-worker` and `-worker-vm` tags. Both worker flavors include Playwright and Chromium for browser-based tasks, along with the fontconfig override that keeps sandboxed browser launches off the root-owned system font cache.
 - Add `age`, `age-keygen`, the `sqlite3` CLI, and SQLite development files to the foundation shared by every image flavor.
@@ -18,14 +19,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
-- Install sudo in every flavor with initial passwordless access for `developer`. `sudo bb-set-password` sets a password and retires bootstrap passwordless access; ordinary `passwd` alone does not switch policy. Container recreation resets setup; VM disk state preserves it. Standard Makefile container launches still block elevation with `no-new-privileges`, but raw engine launches without that flag now permit sudo regardless of tag. Container elevation is available through `SECURITY_OPTS=`; this breaking change requires a major image release.
+- Share Node.js from the foundation layer and Playwright/Chromium from an internal browser layer inherited by full and worker; slim remains browser-free and avoids the full development package set.
+- Remove the `full-sudo`, `slim-sudo`, and `vm-sudo` image flavors and published tags. Container elevation is selected with `SECURITY_OPTS=`; standard Makefile launches retain `no-new-privileges`, while VM flavors permit guest sudo. This is a breaking image-family change and requires a major release.
+- Install sudo in every flavor with initial passwordless access for `developer`. `sudo bb-set-password` sets a password and retires bootstrap passwordless access; ordinary `passwd` alone does not switch policy. Container recreation resets setup; VM disk state preserves it. Raw engine launches without `no-new-privileges` permit sudo regardless of tag.
 - Bump the baked bb release from 0.44.0 to 0.45.0. Custom DNS and reverse-proxy deployments must configure their public hostname with `BB_APP_URL` for the new DNS-rebinding protection. The release also changes the worker protocol and adds bb account/cloud AI services; back up persistent state before upgrading and verify enrolled workers reconnect. Worker images still fetch their private runtime from the server, not this version pin.
 - Refresh the pinned Debian 13 base to the current linux/amd64 image manifest.
 - Keep SSH tooling in `exedev` but disable its guest SSH service and socket while checking exe.dev-provided access. Remove the `EXPOSE 3000` declaration so exe.dev does not automatically select bb as the root HTTP proxy target, and remove the login-user label pending a live VM check. The proxy can be configured explicitly and remains private by default; `EXPOSE` selects the target but is not a firewall.
 
 ### Removed
 
-- Remove the `full-sudo`, `slim-sudo`, and `vm-sudo` image flavors and their published tags. Use `SECURITY_OPTS=` to permit elevation on a container flavor.
+- The three `-sudo` compatibility flavors and their published tags; use `SECURITY_OPTS=` for container elevation.
 
 ### Fixed
 
@@ -41,7 +44,6 @@ Carries bb 0.44.0.
 ### Added
 
 - An `exedev` image flavor for exe.dev. It extends the systemd `vm` flavor with an SSH daemon, exe.dev's login-user label and init wrapper, and bb on port 3000 for the default HTTPS proxy. The base VM flavor remains SSH-free for smolvm.
-
 - `vm` and `vm-sudo` image flavors for long-lived microVMs. Both add systemd as PID 1 and an enabled `bb.service` running as `developer`; the standard `vm` follows full's no-sudo security profile, while `vm-sudo` explicitly adds passwordless guest sudo. Each guest initializes its own machine identity, bb and home state survive stop/start on the VM disk, and shutdown follows systemd service ordering. Published tags use the matching `-vm` or `-vm-sudo` suffix. The host-only `make check-smolvm-systemd` gate verifies boot, the normal target, service and API health, persistence, restart recovery, and bounded shutdown under smolvm.
 
 ### Changed
@@ -83,9 +85,7 @@ Carries bb 0.43.3.
 ### Changed
 
 - Bumps the baked bb release from 0.43.1 to 0.43.3 across all image variants.
-
 - Tool package-manager and compiler cache paths are now declared instead of left to each tool's default. They ship twice: as plain image ENVs (`npm_config_cache` now under `~/.cache/npm`, where npm used to own `~/.npm`; the pnpm store-dir under both `pnpm_config_*` and `npm_config_*` prefixes so repo-pinned pnpm 9.x and 12.x resolve identically; `CARGO_HOME`, `GOPATH`/`GOMODCACHE`/`GOCACHE`, `UV_CACHE_DIR`, and `TMPDIR=/tmp`), and as the same keys in the global mise config as `${HOME}`-relative entries resolved per container. The ENVs make the paths hold for every exec and shell; the mise entries make them correct for derived images that rename the user, which need to redeclare the ENVs only if the paths must be right outside mise contexts too. The motivation is sandbox-friendliness: checkable paths instead of per-tool probe noise (pnpm#9246's ancestor probing). For layouts that mount an existing home: existing caches remain where they are, and the declared paths simply start being used going forward.
-
 - The full image grew about 2MB (under 0.1%): packages moved into a second layer when the `foundation` stage was extracted, which doubles the dpkg metadata written at build time. Nothing else in the full image changed: same packages, users, environment, and command as 0.2.0.
 
 ### Security
