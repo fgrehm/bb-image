@@ -1,6 +1,6 @@
 # Running on exe.dev
 
-The `exedev` flavor derives from the systemd `vm` image, keeps `bb.service`, and installs SSH tooling. The guest `ssh.service` and `ssh.socket` are disabled because exe.dev supplies SSH access. The image declares `exe.dev/login-user=developer` so exe.dev connects as the account that owns the project files and runs bb. exe.dev uses Dockerfile `EXPOSE` metadata to select the default HTTP proxy target, so omitting it avoids automatically routing the root hostname to bb. The service still listens on port 3000 inside the VM; configure that proxy target explicitly when desired, and keep it private unless you deliberately make it public.
+The `exedev` flavor derives from the systemd `vm` image, keeps `bb.service`, and installs SSH tooling. The guest `ssh.service` and `ssh.socket` are disabled because exe.dev supplies SSH access. The image declares `exe.dev/login-user=developer`, and a live VM confirmed that exe.dev connects as that account, which owns the project files and runs bb. exe.dev uses Dockerfile `EXPOSE` metadata to select the default HTTP proxy target, so omitting it avoids automatically routing the root hostname to bb. The service still listens on port 3000 inside the VM; configure that proxy target explicitly when desired, and keep it private unless you deliberately make it public.
 
 Create a VM from the published image:
 
@@ -44,7 +44,7 @@ ssh exe.dev share port my-bb 3000
 
 Then open `https://my-bb.exe.xyz/api/v1/hosts` in a browser authenticated for the VM's private proxy. An unauthenticated `curl` is not a reliable bb health check; the loopback command above checks bb independently of proxy authentication.
 
-**Integration check still required:** verify that exe.dev honors the `exe.dev/login-user` label and opens SSH sessions as `developer` while the guest SSH service remains disabled. The image currently leaves a `developer` linger marker; systemd linger starts that user's service manager at boot and keeps it alive without an interactive login. Confirm whether exe.dev needs that user-session behavior. Bootstrap sudo is granted to `developer`, not an arbitrary platform-created account. Use `sudo bb-set-password` to require a password; see [sudo setup and recovery](sudo.md).
+A live VM confirmed that exe.dev honors the `exe.dev/login-user` label: SSH opens as `developer` while the guest SSH service stays disabled. The image also leaves a `developer` linger marker, which starts that user's service manager at boot and keeps it alive without an interactive login; confirm separately whether exe.dev needs that user-session behavior. Bootstrap sudo is granted to `developer`, not an arbitrary platform-created account. Use `sudo bb-set-password` to require a password; see [sudo setup and recovery](sudo.md).
 
 The proxy is private by default. `EXPOSE` controls automatic default-port selection; it is not a firewall. Removing it does not block the listener: exe.dev also proxies alternate ports 3000–9999 to users who have access to the VM. See the [exe.dev proxy docs](https://exe.dev/docs/proxy) before treating this as a network boundary.
 
@@ -80,7 +80,7 @@ SSH host keys are removed during the build and are not baked into the OCI image.
 
 The exe.dev VM has a persistent disk, so bb state and home-directory changes survive VM restarts. The image does not create or schedule backups. Use the baked `bb-backup` tool and configure a backup destination separately if you need recovery archives.
 
-The standard VM flavors remain the right choice for local smolvm use. Use `exedev` when exe.dev supplies the VM, persistent disk, SSH access, and HTTPS proxy. Real exe.dev creation and SSH access remain unverified integration checks.
+The standard VM flavors remain the right choice for local smolvm use. Use `exedev` when exe.dev supplies the VM, persistent disk, SSH access, and HTTPS proxy. exe.dev creation and SSH login are confirmed; HTTPS proxying and persistence remain manual checks.
 
 ## Private images
 
@@ -109,7 +109,7 @@ The container checks inspect the image's files, labels, unit symlinks, and bb un
 make check-smolvm-systemd FLAVOR=exedev TAG=exedev
 ```
 
-That gate is a compatibility smoke test, not a substitute for creating one real exe.dev VM. Live exe.dev creation, SSH login, HTTPS proxying, and persistence are the final integration checks.
+That gate is a compatibility smoke test, not a substitute for creating one real exe.dev VM. Live exe.dev creation and SSH login are confirmed; HTTPS proxying and persistence remain the final integration checks.
 
 ## Cleanup
 
