@@ -29,4 +29,5 @@ RUN set -e; \
 # systemd uses SIGRTMIN+3 for an orderly shutdown when the VM runtime stops it.
 STOPSIGNAL SIGRTMIN+3
 CMD ["/usr/local/bin/init"]
+LABEL "exe.dev/login-user"="developer"
 LABEL sh.bb.flavor="exedev"

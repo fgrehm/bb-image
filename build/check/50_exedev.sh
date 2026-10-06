@@ -33,8 +33,9 @@ exposed_ports="$($ENGINE image inspect "$img" --format '{{json .Config.ExposedPo
 }
 labels="$($ENGINE image inspect "$img" --format '{{json .Config.Labels}}')"
 case "$labels" in
-*'"exe.dev/login-user"'*)
-	echo "exedev unexpectedly carries the exe.dev login-user label" >&2
+*'"exe.dev/login-user":"developer"'*) ;;
+*)
+	echo "exedev must declare developer as the exe.dev login user" >&2
 	exit 1
 	;;
 esac

@@ -1,6 +1,6 @@
 # Running on exe.dev
 
-The `exedev` flavor derives from the systemd `vm` image, keeps `bb.service`, and installs SSH tooling. The guest `ssh.service` and `ssh.socket` are disabled for now while checking whether exe.dev supplies SSH access itself. The image does not declare `EXPOSE 3000` or the `exe.dev/login-user` label. exe.dev uses Dockerfile `EXPOSE` metadata to select the default HTTP proxy target, so omitting it avoids automatically routing the root hostname to bb. The service still listens on port 3000 inside the VM; configure that proxy target explicitly when desired, and keep it private unless you deliberately make it public.
+The `exedev` flavor derives from the systemd `vm` image, keeps `bb.service`, and installs SSH tooling. The guest `ssh.service` and `ssh.socket` are disabled because exe.dev supplies SSH access. The image declares `exe.dev/login-user=developer` so exe.dev connects as the account that owns the project files and runs bb. exe.dev uses Dockerfile `EXPOSE` metadata to select the default HTTP proxy target, so omitting it avoids automatically routing the root hostname to bb. The service still listens on port 3000 inside the VM; configure that proxy target explicitly when desired, and keep it private unless you deliberately make it public.
 
 Create a VM from the published image:
 
@@ -44,7 +44,7 @@ ssh exe.dev share port my-bb 3000
 
 Then open `https://my-bb.exe.xyz/api/v1/hosts` in a browser authenticated for the VM's private proxy. An unauthenticated `curl` is not a reliable bb health check; the loopback command above checks bb independently of proxy authentication.
 
-**Integration check still required:** verify that SSH login works with exe.dev's host-provided access while the guest SSH service is disabled and without the `exe.dev/login-user` label. If either assumption is wrong, revisit the guest SSH unit and label. The image currently leaves a `developer` linger marker; systemd linger starts that user's service manager at boot and keeps it running without an interactive login. Confirm whether exe.dev needs that user-session behavior and which account SSH selects. Bootstrap sudo is granted to `developer`, not an arbitrary platform-created account. Use `sudo bb-set-password` to require a password; see [sudo setup and recovery](sudo.md).
+**Integration check still required:** verify that exe.dev honors the `exe.dev/login-user` label and opens SSH sessions as `developer` while the guest SSH service remains disabled. The image currently leaves a `developer` linger marker; systemd linger starts that user's service manager at boot and keeps it alive without an interactive login. Confirm whether exe.dev needs that user-session behavior. Bootstrap sudo is granted to `developer`, not an arbitrary platform-created account. Use `sudo bb-set-password` to require a password; see [sudo setup and recovery](sudo.md).
 
 The proxy is private by default. `EXPOSE` controls automatic default-port selection; it is not a firewall. Removing it does not block the listener: exe.dev also proxies alternate ports 3000–9999 to users who have access to the VM. See the [exe.dev proxy docs](https://exe.dev/docs/proxy) before treating this as a network boundary.
 
@@ -69,7 +69,7 @@ The `exedev` flavor derives from the systemd `vm` flavor and adds the exe.dev in
 - `bb.service` runs as `developer` and serves bb on port `3000`
 - `developer` initially has passwordless guest sudo, without a shared password or root-only enable step
 - `openssh-server` tooling is installed, but its guest service and socket are disabled
-- no `EXPOSE 3000` declaration or `exe.dev/login-user` label is baked into the image; configure the proxy target explicitly if needed
+- `exe.dev/login-user=developer` selects the project account for exe.dev SSH access; no `EXPOSE 3000` declaration is baked in, so configure the proxy target explicitly if needed
 - the VM's persistent disk preserves `/home/developer`, bb state, credentials, and project files
 
 SSH host keys are removed during the build and are not baked into the OCI image. The `developer` account remains the account for project work, so bb, mise, and provider state remain together under its home directory.

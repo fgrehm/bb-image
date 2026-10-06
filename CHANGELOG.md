@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-06
+
+### Fixed
+
+- Restore the `exe.dev/login-user=developer` label on the `exedev` flavor. A live VM check showed exe.dev defaults SSH access to `root` without the label, so the image now declares the account that owns the project files and runs bb.
+
 ## [0.5.0] - 2026-10-05
 
 Carries bb 0.45.0.
