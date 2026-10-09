@@ -56,7 +56,7 @@ node = "24.21.0"
 #
 # ripgrep installs an `rg` shim and no `ripgrep` command. tmux comes from
 # aqua:tmux/tmux-builds, which is prebuilt; the asdf fallback backend compiles it.
-neovim     = "0.12.5"
+neovim     = "0.12.6"
 ripgrep    = "15.2.0"
 jq         = "1.8.2"
 shfmt      = "3.14.1"
@@ -73,10 +73,10 @@ gitleaks   = "8.30.1"
 # these on first invocation.
 ruby = { version = "4.0.7", lazy = true }
 bun = { version = "1.4.2", lazy = true }
-go = { version = "1.27.1", lazy = true }
-rust = { version = "1.98.1", lazy = true }
-python = { version = "3.14.7", lazy = true }
-gh = { version = "2.101.0", lazy = true }
+go = { version = "1.27.2", lazy = true }
+rust = { version = "1.99.0", lazy = true }
+python = { version = "3.14.8", lazy = true }
+gh = { version = "2.102.0", lazy = true }
 
 # pnpm is here because agents meet pnpm projects, not because bb uses it. bb detects
 # package managers to report them and installs its plugins with npm, never pnpm. The
@@ -87,17 +87,17 @@ gh = { version = "2.101.0", lazy = true }
 # and runs whatever version a project declares in packageManager. Note that pnpm 10 and
 # later refuse to run dependency lifecycle scripts unless they are allow-listed, which is
 # why a native dependency can install cleanly and still be broken. `pnpm approve-builds`.
-pnpm = { version = "12.6.0", lazy = true }
+pnpm = { version = "12.10.1", lazy = true }
 
 # Pre-commit hooks. Deliberately unpinned.
 prek = { version = "latest", lazy = true }
 
-# Coding agent CLIs. Deliberately unpinned: `latest` resolves when the shim
-# first runs, so a fresh container pulls the current release rather than a stale
-# bake. bb dispatches to whichever of these you have authenticated.
-claude   = { version = "latest", lazy = true }
-codex    = { version = "latest", lazy = true }
-pi       = { version = "latest", lazy = true }
-opencode = { version = "latest", lazy = true }
-grok     = { version = "latest", lazy = true }
-oh-my-pi = { version = "latest", lazy = true }
+# Coding agent CLIs. Deliberately unpinned and automatically updated in
+# existing containers. A project-level version pin takes precedence and is not
+# auto-updated. bb dispatches to whichever of these you have authenticated.
+claude   = { version = "latest", lazy = true, auto_update = true }
+codex    = { version = "latest", lazy = true, auto_update = true }
+pi       = { version = "latest", lazy = true, auto_update = true }
+opencode = { version = "latest", lazy = true, auto_update = true }
+grok     = { version = "latest", lazy = true, auto_update = true }
+oh-my-pi = { version = "latest", lazy = true, auto_update = true }

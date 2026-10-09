@@ -6,6 +6,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- Update mise to 2026.10.6 and Playwright to 1.64.0, including its bundled Chromium. Bump Neovim to 0.12.6, Go to 1.27.2, Rust to 1.99.0, Python to 3.14.8, GitHub CLI to 2.102.0 and pnpm to 12.10.1.
+- Automatically update the unpinned agent CLIs in existing containers when they are launched. Project-specific version pins take precedence and are not automatically updated.
+
 ## [0.5.1] - 2026-10-06
 
 ### Fixed

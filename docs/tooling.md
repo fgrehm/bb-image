@@ -36,7 +36,7 @@ The toolset is the global config and sits outside the home volume, so a rebuild 
 
 Project pins resolve with no shell setup, interactive or not: a shim reads the repo's `mise.toml` each time it is invoked, so a git hook or anything else bb spawns gets the project's tools. Whichever version resolves installs into `/opt/mise/installs/<tool>/<version>`, versioned and side by side, so two projects pinning different versions do not disturb each other. The consequence is that `/opt/mise` has to stay writable at runtime, including inside a sandbox: if a sandbox denies it, the first use of a project-pinned tool fails with a permission error instead of falling back. Allow writes to `/opt/mise`, or bind a per-project directory over `/opt/mise/installs`.
 
-Agent CLIs and prek are deliberately unpinned, so a fresh container resolves the current release rather than whatever was current when the image was built.
+Agent CLIs and prek are deliberately unpinned. A fresh container resolves their current releases on first use; the agent CLIs also check for and install updates when launched, at most once per 24 hours by default. A project's own version pin takes precedence and is not auto-updated. Prek remains first-use only.
 
 Configs that use only plain version strings need no trust step; ones using `[settings]`, `[env]`, inline tables, or templated tasks do.
 

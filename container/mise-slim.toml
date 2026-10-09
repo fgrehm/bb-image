@@ -47,14 +47,14 @@ node = "24.21.0"
 # and runs whatever version a project declares in packageManager. Note that pnpm 10 and
 # later refuse to run dependency lifecycle scripts unless they are allow-listed, which is
 # why a native dependency can install cleanly and still be broken. `pnpm approve-builds`.
-pnpm = { version = "12.6.0", lazy = true }
+pnpm = { version = "12.10.1", lazy = true }
 
-# Coding agent CLIs. Deliberately unpinned: `latest` resolves when the shim
-# first runs, so a fresh container pulls the current release rather than a stale
-# bake. bb dispatches to whichever of these you have authenticated.
-claude   = { version = "latest", lazy = true }
-codex    = { version = "latest", lazy = true }
-pi       = { version = "latest", lazy = true }
-opencode = { version = "latest", lazy = true }
-grok     = { version = "latest", lazy = true }
-oh-my-pi = { version = "latest", lazy = true }
+# Coding agent CLIs. Deliberately unpinned and automatically updated in
+# existing containers. A project-level version pin takes precedence and is not
+# auto-updated. bb dispatches to whichever of these you have authenticated.
+claude   = { version = "latest", lazy = true, auto_update = true }
+codex    = { version = "latest", lazy = true, auto_update = true }
+pi       = { version = "latest", lazy = true, auto_update = true }
+opencode = { version = "latest", lazy = true, auto_update = true }
+grok     = { version = "latest", lazy = true, auto_update = true }
+oh-my-pi = { version = "latest", lazy = true, auto_update = true }
