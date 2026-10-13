@@ -14,7 +14,7 @@ grep -q '^exec /sbin/init' /usr/local/bin/init
 [ -L /etc/systemd/system/multi-user.target.wants/bb.service ]
 [ -f /etc/systemd/system/bb.service ]
 grep -q 'User=developer' /etc/systemd/system/bb.service
-grep -q 'ExecStart=.*--in-app-updates.*--server-port 3000' /etc/systemd/system/bb.service
+grep -q 'ExecStart=.*bb-app --server-bind-host 0.0.0.0 --server-port 3000' /etc/systemd/system/bb.service
 [ "$(id -u developer)" = 1000 ]
 [ -x /usr/sbin/sshd ]
 [ ! -e /etc/systemd/system/multi-user.target.wants/ssh.service ]

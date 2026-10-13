@@ -2,12 +2,12 @@
 # shellcheck shell=sh disable=SC2148,SC2154
 # check-scope: repo
 
-say "in-app updates are enabled only for default bb starts"
+say "default bb starts keep in-app updates enabled"
 for source in container/entrypoint.sh container/bb.service container/exedev-bb.service; do
-	grep -Fq -- '--in-app-updates' "$root/$source" || {
-		echo "$source does not enable bb in-app updates" >&2
+	if grep -Fq -- '--no-in-app-updates' "$root/$source"; then
+		echo "$source disables bb in-app updates by default" >&2
 		exit 1
-	}
+	fi
 done
 
 tmp="$(mktemp -d)"
@@ -28,13 +28,12 @@ mkdir -p "$tmp/home"
 PATH="$tmp:$PATH" HOME="$tmp/home" ARGS_FILE="$tmp/default.args" \
 	bash "$tmp/entrypoint.sh"
 printf '%s\n' \
-	--in-app-updates \
 	--server-bind-host \
 	0.0.0.0 \
 	--server-port \
 	38886 >"$tmp/expected-default.args"
 cmp -s "$tmp/expected-default.args" "$tmp/default.args" || {
-	echo "entrypoint default command is missing the in-app update flag or changed its defaults" >&2
+	echo "entrypoint default command disables in-app updates or changed its defaults" >&2
 	exit 1
 }
 
@@ -46,4 +45,4 @@ cmp -s "$tmp/expected-caller.args" "$tmp/caller.args" || {
 	exit 1
 }
 
-echo "default starts enable updates; caller commands stay untouched"
+echo "default starts retain updates; caller commands stay untouched"

@@ -6,6 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-13
+
+Carries bb 0.46.0.
+
+### Added
+
+- Update the bundled bb app to 0.46.0, with a customizable navigation rail, faster thread search, Prompt Library, per-thread notifications, and opt-in storage and retention controls. Plugins using the removed experimental sidebar-navigation or header APIs need updating.
+
 ### Changed
 
 - Update mise to 2026.10.6 and Playwright to 1.64.0, including its bundled Chromium. Bump Neovim to 0.12.6, Go to 1.27.2, Rust to 1.99.0, Python to 3.14.8, GitHub CLI to 2.102.0 and pnpm to 12.10.1.

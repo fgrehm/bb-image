@@ -30,7 +30,7 @@ bb account/cloud AI can become ready through existing Connect credentials and is
 
 ## Updating bb within an image
 
-The server starts with `--in-app-updates`, so updates are available in Settings > Updates and through `bb updates app apply`. This updates bb inside the persistent home volume at `~/.bb/app-versions`; it does not replace the container or image. Back up state before updating. Installed app versions consume volume space, and bb does not automatically roll back a failed update. Use `bb-app start --bundled` to run the version baked into the image for recovery or to pin execution to that version. Check the baked and installed versions with `bb-image-info`.
+bb 0.46.0 enables in-app updates by default, so the image's normal start commands do not need an update flag. Updates are available in Settings > Updates and through `bb updates app apply`. Applying an update stores the new version in the persistent home volume at `~/.bb/app-versions`; it does not replace the container or image. Back up state before updating. Installed app versions consume volume space, and bb does not automatically roll back a failed update. Use `bb-app start --bundled` to run the version baked into the image for recovery or to pin execution to that version. To disable in-app updates, pass `--no-in-app-updates` to `bb-app`. Check the baked and installed versions with `bb-image-info`.
 
 ## The same thing without make
 
