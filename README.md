@@ -1,52 +1,84 @@
 # bb-image
 
-OCI image family for running [bb](https://getbb.app) with projects and persistent state: rootless container flavors and systemd-based microVM flavors. Published at `ghcr.io/fgrehm/bb`.
+Container and VM images for running [bb](https://getbb.app) with development tools and persistent state. Published at `ghcr.io/fgrehm/bb`, supported on **Linux amd64 (`linux/amd64`)**.
+
+## Quick start
+
+With [rootless Podman](https://podman.io/docs/installation) installed, run the published full image. No repository checkout or local build is needed:
+
+```bash
+podman run -d --name bb \
+  --userns=keep-id \
+  --security-opt no-new-privileges \
+  -p 127.0.0.1:38886:38886 \
+  -v bb-home:/home/developer \
+  ghcr.io/fgrehm/bb:latest
+```
+
+Open [http://localhost:38886](http://localhost:38886). The port is local-only, and the `bb-home` volume keeps bb state, provider logins, Git/SSH configuration, and shell history when you replace the container.
+
+To work on existing projects, add a bind mount to the command above, using an existing host directory:
+
+```bash
+-v "$HOME/src:/home/developer/src:Z"
+```
+
+View startup logs with `podman logs -f bb`. See [Running bb](docs/running.md) for Docker differences, port options, host credentials, and custom DNS or reverse proxies.
 
 ## Choose an image
 
-All flavors share sudo (initially passwordless for `developer`), `bb-backup`, `age`/`age-keygen`, the SQLite CLI and development files, and the common shell, Git, SSH client, archive, and mise tooling. Images are built and supported for `linux/amd64` only. See [tool availability](docs/tooling.md#shared-foundation).
+Start with **full** unless you need a smaller server, a VM, or a separate execution worker.
 
-The `edge` tags track `main`; stable version tags are published by a release. `latest` tracks full and `slim` tracks slim; other flavors have no bare moving aliases.
-
-| Flavor | Tags | Includes |
+| Flavor | Use it when you want… | Guide |
 | --- | --- | --- |
-| Full (default) | `latest`, `edge`, `<bb-version>`, `img-<version>` | bb, Node.js, Playwright + Chromium, dev tools, DB and document tools, backups |
-| Slim | `slim`, `edge-slim`, `<bb-version>-slim`, `img-<version>-slim` | bb, Node.js, mise, lazy agent CLIs and backups; no Chromium or full development toolset |
-| VM | `edge-vm`, `<bb-version>-vm`, `img-<version>-vm` | Full with systemd, bb service, rootless Podman CLI and persistent VM state |
-| exe.dev | `edge-exedev`, `<bb-version>-exedev`, `img-<version>-exedev` | VM plus exe.dev integration; SSH lands as `developer`, guest SSH stays disabled |
-| Worker | `edge-worker`, `<bb-version>-worker`, `img-<version>-worker` | Node.js, Playwright + Chromium, mise, lazy agent CLIs and backups; no bb server or enrollment |
-| Worker VM | `edge-worker-vm`, `<bb-version>-worker-vm`, `img-<version>-worker-vm` | Worker with systemd and rootless Podman CLI for manually enrolled execution machines |
+| `full` (default) | bb with Playwright/Chromium, developer tools, database clients, and document tools | [Containers](docs/running.md) |
+| `slim` | bb and lazy agent CLIs, without Chromium or the full development toolset | [Containers](docs/running.md) |
+| `vm` | Full in a systemd microVM, with `bb.service` and rootless Podman | [smolvm](docs/smolvm.md) |
+| `exedev` | The VM environment adapted for exe.dev's SSH access and HTTPS proxy | [exe.dev](docs/exedev.md) |
+| `worker` | A separate execution container with Chromium and lazy agent CLIs, but no bb server | [Workers](docs/workers.md) |
+| `worker-vm` | The worker environment with systemd and rootless Podman | [Workers](docs/workers.md) |
 
-Node.js is shared from the foundation layer, while the internal browser layer is shared by full, worker, and their descendants. Slim is intentionally a sibling without browser or full development packages, for deployments that value its smaller footprint over those tools. Every flavor includes `bb-backup`; workers can protect enrollment identity and agent traces without a bb server. Full keeps unsuffixed tags. `latest` and `slim` are moving aliases; VM, exe.dev, and worker flavors have no bare moving aliases. Release pins use the bb version, the bb minor (for example `0.45`), or `img-<version>`, each carrying the flavor's suffix. All flavors initially grant passwordless sudo. Standard Makefile container launches block it with `no-new-privileges`; use `make run FLAVOR=full SECURITY_OPTS=` to permit container elevation on any container flavor. Direct engine launches must pass the no-new-privileges flag explicitly to block elevation. VM images permit guest sudo and require smolvm's default VM-grade workload profile rather than `--unprivileged`. Use `sudo bb-set-password` to require a password, as described in [sudo setup and recovery](docs/sudo.md). These changes are documented in the [0.5.0 release notes](CHANGELOG.md); older pinned tags retain their original policy. The `exedev` flavor is for [exe.dev](https://exe.dev/docs/customization); host-provided SSH connects as `developer`, the guest SSH daemon stays disabled, and no default proxy port is set, so configure the proxy target explicitly. See [running and security options](docs/running.md), [running as a microVM](docs/smolvm.md), and [tag policy](docs/publishing.md).
+Every flavor includes Node.js, mise, Git, SSH client tooling, sudo, and backup utilities. Some tools are baked into the image; others install on first use. See [Tools and home state](docs/tooling.md) for availability and project-specific version pins. Workers require manual enrollment with a bb server.
 
-Server flavors enable bb's in-app update channel. Updates install into persistent home state, so back up before applying one; `bb-app start --bundled` runs the baked version. `bb-image-info` reports baked Node, Playwright, and bb versions alongside the installed bb version where present. See [updating bb within an image](docs/running.md#updating-bb-within-an-image).
+VM flavors boot systemd and use a persistent machine disk, not the container launch command above. For smolvm, use the default VM-grade workload profile rather than `--unprivileged`. On exe.dev, SSH connects as `developer`; configure the bb proxy target explicitly as described in its guide.
 
-## Run it as a container
+## Choose a tag
+
+All tags use the registry prefix `ghcr.io/fgrehm/bb:`.
+
+| Tag | Meaning |
+| --- | --- |
+| `latest`, `slim` | Latest stable full or slim image |
+| `edge`, `edge-<flavor>` | Builds from `main`; full uses unsuffixed `edge` |
+| `img-<image-version>` | One image release, regardless of the bb version it carries |
+| `<bb-version>`, `<bb-major>.<bb-minor>` | Newest image carrying that bb release or release line; image dependencies can change |
+
+For non-full release tags, append the flavor: `img-<image-version>-vm` or `<bb-version>-slim`. VM, exe.dev, and worker flavors have no bare moving aliases. Use an image-version tag for a specific image release; see [Publishing](docs/publishing.md) for the full tag policy and [Releases](https://github.com/fgrehm/bb-image/releases) for available versions.
+
+## Operational essentials
+
+- **Persistence and backups:** Container home lives in `bb-home`; VM state lives on the machine disk. Toolchains live outside container home, so runtime-installed tools are lost when a container is replaced. Every flavor ships `bb-backup`, but no backup schedule is configured. See [persistence](docs/running.md#what-persists) and [backups](docs/backups.md).
+- **Elevation:** Every flavor initially grants `developer` passwordless sudo. The quick start and standard Makefile container launches block elevation with `no-new-privileges`; VM workloads permit guest sudo. Use `sudo bb-set-password` to require a password where elevation is permitted. See [sudo setup and recovery](docs/sudo.md) before changing this policy.
+- **bb updates:** Server flavors support in-app updates stored in persistent home state. Updating bb this way does not replace the image or its launcher. Back up first; `bb-app start --bundled` selects the installed launcher's bundled version. See [updating bb](docs/running.md#updating-bb-within-an-image).
+- **Managed home files:** Startup updates unmodified image-managed agent guidance and shell blocks while preserving your edits. See [home hydration](docs/tooling.md#home-hydration).
+
+## Build and verify locally
+
+From a checkout of this repository, with Podman and Make installed:
 
 ```bash
-make ci     # build and verify the full image locally
-make run    # serve bb at http://localhost:38886
+make ci     # build and verify the full image
+make run    # serve the local image at http://localhost:38886
 make hack   # open a shell with the same home volume
 ```
 
-`make run` uses a named `bb-home` volume for bb state, logins, git and shell config, and binds the port to `127.0.0.1`. Mount your projects with `MOUNTS`, for example:
+To build another flavor, use `make ci FLAVOR=slim TAG=slim`. Mount projects when launching with `make run MOUNTS='-v ~/src:/home/developer/src:Z'`.
 
-```bash
-make run MOUNTS='-v ~/src:/home/developer/src:Z'
-```
+For repository changes, read [AGENTS.md](AGENTS.md) for build invariants, verification, and release conventions. Deployment details belong in the linked guides.
 
-Use `make ci FLAVOR=slim TAG=slim` to build and check another flavor. For direct Podman and Docker commands, port options, volume details, host logins, and security behavior, see [Running bb](docs/running.md).
+## More guides
 
-## What else is here
-
-- [Tools and home state](docs/tooling.md): baked and lazy tools, mise project pins, hydration, and operational gotchas.
-- [Backups](docs/backups.md): recovery archives and additive trace mirroring with `bb-backup`.
-- [Using this image as a base](docs/derived-images.md): ownership, tool installs, cache paths, and entrypoint contracts.
-- [Developing bb](docs/developing-bb.md): build and run bb from a checkout using `full` with `SECURITY_OPTS=`.
-- [Running as a microVM](docs/smolvm.md): systemd VM flavors, rootless Podman CLI, and [smolvm](https://smolmachines.com) examples.
-- [Worker images](docs/workers.md): BB-free `worker` and `worker-vm` targets for manually enrolled execution machines.
-- [Running on exe.dev](docs/exedev.md): the `exedev` flavor and its pending SSH/proxy integration checks.
-- [Publishing](docs/publishing.md): tags, release workflow, and architecture support.
-- [Changelog](CHANGELOG.md): changes to the image itself.
-
-The image's toolset and browser downloads live outside the home volume. Runtime caches and logins live in it; managed home files update on startup without replacing your edits. See [home hydration](docs/tooling.md#home-hydration) for details.
+- [Extend the image](docs/derived-images.md): tool installs, ownership, cache paths, and startup contracts.
+- [Develop bb itself](docs/developing-bb.md): run bb from a source checkout using the full image.
+- [Publish an image release](docs/publishing.md): build/check workflow, tags, and architecture support.
+- [Changelog](CHANGELOG.md): user-visible changes to these images.
