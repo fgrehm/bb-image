@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-19
+
+### Changed
+
+- Update the bundled bb app to 0.46.1, Playwright to 1.64.1 (including its bundled Chromium), and Bun to 1.4.3.
+
 ## [0.6.0] - 2026-10-13
 
 Carries bb 0.46.0.
