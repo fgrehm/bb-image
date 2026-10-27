@@ -4,7 +4,9 @@ Two versions move independently. **bb** owns the bare semver tags (`0.45.0`, `0.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the image follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) with the bump meanings recorded in `AGENTS.md`: major for how the image is run, minor for new tools or a version bump, patch for a bb bump or a fix that moves nothing else.
 
-## [Unreleased]
+## [0.9.0] - 2026-10-27
+
+Carries bb 0.47.1.
 
 ### Added
 
