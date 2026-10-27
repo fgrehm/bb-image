@@ -2,6 +2,16 @@
 
 Container image for running [bb](https://getbb.app). `README.md` is the user-facing entry point, with detailed guides under `docs/`; this file is the working context for agents.
 
+## Where you are running
+
+This repository is used both on a host and from inside a bb container, so establish the environment before planning verification or declaring something untestable:
+
+```bash
+command -v podman; ls -l /dev/kvm 2>&1; command -v smolvm
+```
+
+On a host with all three, `make build`, `make check` for the relevant flavor, and the `check-smolvm-*` gates all run. Inside a container none of them are available: there is no podman daemon, no `/dev/kvm`, and no smolvm, so `make check` cannot run at all and only the pre-commit lint (shellcheck, shfmt) and gitleaks are possible. Both smolvm gates create and delete a real microVM, so ask before running them.
+
 ## Layout
 
 - `container/` — the image and what it contains:
