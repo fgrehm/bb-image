@@ -1,0 +1,57 @@
+#!/bin/sh
+# Called by interactive shell startup only. Never changes the listener.
+[ -t 2 ] || exit 0
+[ "${BB_LISTENER_REMINDER:-1}" != 0 ] || exit 0
+[ "$(/usr/bin/id -un)" = developer ] || exit 0
+# Only the systemd VM flavors ship an image-owned listener default. Container
+# flavors start bb on 0.0.0.0 from the entrypoint, so there is nothing to say.
+[ -f /etc/bb/listener.env ] || exit 0
+[ ! -e "${XDG_CONFIG_HOME:-$HOME/.config}/bb/listener-reminder-disabled" ] || exit 0
+
+data="${BB_DATA_DIR:-$HOME/.bb}"
+host=
+port=
+host_source=image
+# bb's own env.json outranks the unit environment, which outranks the image
+# default, so resolve in that order and never contradict the running service.
+if [ -f "$data/env.json" ]; then
+	host="$(sed -n 's/.*"BB_SERVER_BIND_HOST"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$data/env.json" | tail -n 1)"
+	port="$(sed -n 's/.*"BB_SERVER_PORT"[[:space:]]*:[[:space:]]*"\?\([0-9][0-9]*\)"\?.*/\1/p' "$data/env.json" | tail -n 1)"
+	[ -z "$host" ] || host_source=env.json
+fi
+if [ -z "$host" ] && [ -f /etc/default/bb ]; then
+	host="$(sed -n 's/^BB_SERVER_BIND_HOST=//p' /etc/default/bb | tail -n 1)"
+	[ -z "$host" ] || host_source=default
+fi
+if [ -z "$port" ] && [ -f /etc/default/bb ]; then
+	port="$(sed -n 's/^BB_SERVER_PORT=//p' /etc/default/bb | tail -n 1)"
+fi
+[ -n "$host" ] || host="$(sed -n 's/^BB_SERVER_BIND_HOST=//p' /etc/bb/listener.env | tail -n 1)"
+[ -n "$port" ] || port="$(sed -n 's/^BB_SERVER_PORT=//p' /etc/bb/listener.env | tail -n 1)"
+host="${host%\"}"
+host="${host#\"}"
+port="${port%\"}"
+port="${port#\"}"
+[ -n "$port" ] || port=38886
+# bb's compiled-in fallback is loopback too, so an empty host means loopback.
+[ -z "$host" ] || [ "$host" = 127.0.0.1 ] || exit 0
+
+{
+	printf '%s\n' "bb-image: bb listens on 127.0.0.1:$port only, so nothing outside this VM can reach it."
+	case "$host_source" in
+	env.json)
+		# /etc/default/bb cannot win against bb's own file, so do not suggest it.
+		printf '%s\n' "bb's $data/env.json sets the listener and outranks /etc/default/bb."
+		printf '%s\n' 'To expose it: bb-app env set BB_SERVER_BIND_HOST 0.0.0.0 && sudo systemctl restart bb.service'
+		;;
+	*)
+		printf '%s\n' 'To expose it: add BB_SERVER_BIND_HOST=0.0.0.0 to /etc/default/bb, then run:'
+		printf '%s\n' '  sudo systemctl restart bb.service'
+		;;
+	esac
+	printf '%s\n' 'To silence only this reminder: set BB_LISTENER_REMINDER=0, or run:'
+	# Show a literal command for the human to run in their own shell.
+	# shellcheck disable=SC2016
+	printf '%s\n' '  mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}/bb" && touch "${XDG_CONFIG_HOME:-$HOME/.config}/bb/listener-reminder-disabled"'
+} >&2
+exit 0

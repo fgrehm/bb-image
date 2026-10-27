@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- An interactive-shell reminder in the VM flavors says that bb listens on loopback only and prints the opt-in command, following the passwordless-sudo reminder's pattern and suppression rules.
+
 ### Changed
 
 - Update the bundled bb app to 0.47.1.
