@@ -44,6 +44,19 @@ Build with `--secret id=github_token,type=env,env=GH_TOKEN` (or the equivalent s
 
 Pinning is what removes the network round trip: a pinned version that is already installed runs offline. `MISE_OFFLINE=1` goes further and blocks HTTP entirely, turning a missing tool into a hard failure at the point of use. `MISE_LOCKED=1` with a `mise lock` lockfile does the same for `mise install`. Neither silences the resolution warnings for any unpinned `latest` tools left in the config, so pin or drop those as well if the derived image has to be quiet and fully offline. If unpinned agent CLIs (`claude`, `codex`, ...) emit rate-limit warnings when a tokenless build resolves them, `MISE_GITHUB_TOKEN` in the environment is the quiet path; the base build keeps them unpinned on purpose so a fresh container resolves the current release. The baked config gives version fetches 15 seconds and caches the catalog for a day (`fetch_remote_versions_timeout`, `fetch_remote_versions_cache`) — but a shim invocation itself is capped by mise at ~3s no matter what, so a slow resolution falls back silently and warns; only a direct `mise install` inherits the wider window.
 
+## A routable listener on the first boot
+
+The VM flavors bind `127.0.0.1` by default, and neither smolvm nor exe.dev offers a verified way to install configuration before the first `bb.service` start. Bake the override instead; the service reads `/etc/default/bb` after the image default, so it applies from the first boot:
+
+```dockerfile
+FROM ghcr.io/fgrehm/bb:img-<image-version>-vm
+
+USER root
+RUN printf 'BB_SERVER_BIND_HOST=0.0.0.0\n' > /etc/default/bb
+```
+
+Add `BB_SERVER_PORT=<port>` to the same file when the deployment needs a different port; the image default stays in `/etc/bb/listener.env`. Do not seed the listener from `~/.bb/env.json` in a derived image: bb reads that after the service environment, so it would silently override the file this snippet bakes. See [The VM listener](running.md#the-vm-listener).
+
 ## Contracts a derived image can rely on
 
 - **Identity and baked-version labels.** Every published variant stamps an `sh.bb.flavor` OCI label, and the check harness refuses to run an image's checks under another flavor's marker. Derived images keep it inherited from the base stage. Images also inherit `sh.bb.baked.node`, `sh.bb.baked.playwright` where applicable, and `sh.bb.baked.bb` where applicable; `/usr/local/share/bb/baked-versions` and `bb-image-info` expose the same baked versions at runtime. These labels and files describe the base image contents and are not changed when a derivative installs newer tools.

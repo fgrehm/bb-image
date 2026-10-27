@@ -7,10 +7,19 @@ Use [`examples/smolvm-systemd/Smolfile`](../examples/smolvm-systemd/Smolfile) fo
 ```bash
 smolvm machine create --name bb --smolfile examples/smolvm-systemd/Smolfile
 smolvm machine start --name bb
-curl -s -o /dev/null -w '%{http_code}\n' http://localhost:38886/api/v1/hosts   # 200
+smolvm machine exec --name bb -- curl -fsS http://127.0.0.1:38886/api/v1/hosts   # 200 from inside the guest
 smolvm machine shell --name bb
 smolvm machine exec --name bb -- systemctl status bb.service
 ```
+
+bb binds `127.0.0.1:38886` by default, so the published port in the example is not reachable from the host until you opt in to a routable listener and restart the service:
+
+```bash
+smolvm machine exec --name bb -- sh -c 'echo BB_SERVER_BIND_HOST=0.0.0.0 >> /etc/default/bb; systemctl restart bb.service'
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:38886/api/v1/hosts   # 200
+```
+
+The opt-in, its precedence, and the first-boot rule are in [The VM listener](running.md#the-vm-listener). Interactive guest shells remind you while the listener is loopback.
 
 The VM disk persists `/home/developer`, Podman images and containers, system state, caches, and machine identity across stop/start. systemd runs as root at PID 1 because it initializes and manages the guest; `bb.service` explicitly runs bb as uid/gid `developer`. The container-oriented `entrypoint.sh` is not PID 1 and is not used to start bb.
 
@@ -43,7 +52,7 @@ make check-smolvm-systemd FLAVOR=exedev TAG=exedev
 make check-smolvm-podman FLAVOR=exedev TAG=exedev
 ```
 
-Each `make check-smolvm-systemd` invocation requires a host with smolvm and KVM/libkrun. It asserts systemd as workload PID 1, `multi-user.target`, bb service and API health, persistent home state, recovery after stop/start, and bounded shutdown. `make check-smolvm-podman` boots a separate disposable VM and checks rootless Podman, delegated cgroups, slirp networking, port publishing, and the absence of an API socket.
+Each `make check-smolvm-systemd` invocation requires a host with smolvm and KVM/libkrun. It asserts systemd as workload PID 1, `multi-user.target`, bb service and API health, the loopback listener default with the `/etc/default/bb` opt-in and its removal, persistent home state, recovery after stop/start, and bounded shutdown. `make check-smolvm-podman` boots a separate disposable VM and checks rootless Podman, delegated cgroups, slirp networking, port publishing, and the absence of an API socket.
 
 ## Local image archive
 
@@ -56,7 +65,7 @@ smolvm machine create --name bb --smolfile examples/smolvm-systemd/Smolfile --im
 
 ## Networking and credentials
 
-bb needs outbound access for provider APIs, Git, and package installs, so the example enables networking and publishes port 38886. The agent CLI declarations are intentionally unpinned and installed lazily on first use; without a GitHub token, mise resolves them against GitHub's unauthenticated rate limit and can fail with an opaque 403.
+bb needs outbound access for provider APIs, Git, and package installs, so the example enables networking and publishes port 38886. The published port reaches bb only after the listener opt-in shown above. The agent CLI declarations are intentionally unpinned and installed lazily on first use; without a GitHub token, mise resolves them against GitHub's unauthenticated rate limit and can fail with an opaque 403.
 
 smolvm secret references resolve per launch. Add this to a private copy of the Smolfile when token forwarding is needed:
 

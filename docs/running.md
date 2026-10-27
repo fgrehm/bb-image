@@ -20,7 +20,35 @@ bb 0.45.0 rejects requests with an unconfigured DNS hostname. Localhost and lite
 bb-app config set BB_APP_URL https://bb.example.com
 ```
 
-Restart bb through its normal supervisor afterward (recreate the container with the same home volume, or restart `bb.service` in a VM). For a VM, `/etc/default/bb` can also supply `BB_APP_URL` to the service. Matching proxy Host/Origin headers alone do not authorize an arbitrary hostname. `BB_BIND` only selects the container's host-side bind address, not an allowed request hostname. Do not bake a deployment URL into a shared image. See the [exe.dev setup](exedev.md) for its proxy hostname.
+Restart bb through its normal supervisor afterward (recreate the container with the same home volume, or restart `bb.service` in a VM). In a VM, `/etc/default/bb` can also supply `BB_APP_URL`, but `bb-app config set` wins whenever both are set: it writes `~/.bb/config.json`, which bb reads after the service environment. Matching proxy Host/Origin headers alone do not authorize an arbitrary hostname. `BB_BIND` only selects the container's host-side bind address, not an allowed request hostname. Do not bake a deployment URL into a shared image. See the [exe.dev setup](exedev.md) for its proxy hostname.
+
+## The VM listener
+
+The `vm` and `exedev` flavors start bb through `bb.service`, which reads bb's own listener variables instead of a command-line flag:
+
+| File | Owner | Role |
+| --- | --- | --- |
+| `/etc/bb/listener.env` | image | default, `127.0.0.1` with port `38886` on `vm` and `3000` on `exedev` |
+| `/etc/default/bb` | operator | optional override, read second, so its variables win |
+
+systemd applies `EnvironmentFile=` entries in order and a later file wins per variable. Both files become the service environment, which is the weakest layer in bb's own precedence chain:
+
+    service environment  <  CLI flag  <  ~/.bb/config.json  <  ~/.bb/env.json
+
+So `bb-app env set BB_SERVER_BIND_HOST 0.0.0.0` also wins over `/etc/default/bb`. bb accepts only `127.0.0.1` or `0.0.0.0` for the host and a positive integer for the port; anything else fails at startup. Both are startup-only, so a change needs a restart:
+
+```bash
+printf 'BB_SERVER_BIND_HOST=0.0.0.0\n' | sudo tee -a /etc/default/bb
+sudo systemctl restart bb.service
+```
+
+Loopback is the default because a VM has a platform gateway or a guest-side proxy in front of it, and both shapes prefer a loopback listener. `vm` therefore no longer answers `curl http://localhost:38886` from the host until you opt in, because the published port reaches only a routable listener. On exe.dev the platform proxy cannot reach a loopback-bound bb, so the same opt-in is what makes `exe.dev share port` work; a reverse proxy in the guest, such as Tailscale Serve, can only forward to `http://127.0.0.1`, which is the default.
+
+The listener and the request hostname are separate settings. `BB_SERVER_BIND_HOST` decides what bb listens on, `BB_BIND` in `make run` decides what the container publishes on the host, and `BB_APP_URL` decides which hostname bb accepts. See [Custom DNS and reverse proxies](#custom-dns-and-reverse-proxies).
+
+Neither platform offers a verified way to install configuration before the first `bb.service` start. A deployment that needs a routable listener from the first boot bakes `/etc/default/bb` into a derived image; see [Using this image as a base](derived-images.md).
+
+Interactive shells in the VM flavors print a reminder while the effective listener is loopback, with the opt-in command. Silence it with `BB_LISTENER_REMINDER=0` or `~/.config/bb/listener-reminder-disabled`; it disappears by itself once the listener is routable. Container flavors keep the entrypoint's `0.0.0.0` listener and never print it.
 
 ## Upgrading to bb 0.45.0
 

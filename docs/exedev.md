@@ -1,6 +1,6 @@
 # Running on exe.dev
 
-The `exedev` flavor derives from the systemd `vm` image, keeps `bb.service`, and installs SSH tooling. The guest `ssh.service` and `ssh.socket` are disabled because exe.dev supplies SSH access. The image declares `exe.dev/login-user=developer`, and a live VM confirmed that exe.dev connects as that account, which owns the project files and runs bb. exe.dev uses Dockerfile `EXPOSE` metadata to select the default HTTP proxy target, so omitting it avoids automatically routing the root hostname to bb. The service still listens on port 3000 inside the VM; configure that proxy target explicitly when desired, and keep it private unless you deliberately make it public.
+The `exedev` flavor derives from the systemd `vm` image, keeps `bb.service`, and installs SSH tooling. The guest `ssh.service` and `ssh.socket` are disabled because exe.dev supplies SSH access. The image declares `exe.dev/login-user=developer`, and a live VM confirmed that exe.dev connects as that account, which owns the project files and runs bb. exe.dev uses Dockerfile `EXPOSE` metadata to select the default HTTP proxy target, so omitting it avoids automatically routing the root hostname to bb. The service listens on `127.0.0.1:3000` inside the VM by default; the exe.dev proxy cannot reach a loopback listener, so exposing it is an explicit opt-in. Configure that proxy target explicitly when desired, and keep it private unless you deliberately make it public.
 
 Create a VM from the published image:
 
@@ -23,7 +23,7 @@ The expected access and API checks are:
 ```bash
 ssh my-bb.exe.xyz
 systemctl status bb.service
-ss -ltnp | grep ':3000'
+ss -ltnp | grep ':3000'   # 127.0.0.1:3000 by default
 curl -fsS http://127.0.0.1:3000/api/v1/hosts
 ```
 
@@ -34,13 +34,20 @@ bb-app config set BB_APP_URL https://my-bb.exe.xyz
 sudo systemctl restart bb.service
 ```
 
-The VM service can alternatively read `BB_APP_URL` from `/etc/default/bb`. Do not bake a shared hostname into the image. Loopback health checks alone do not verify that the public hostname is accepted. The service enables bb's in-app update channel; see [Updating bb within an image](running.md#updating-bb-within-an-image) for applying updates, backing up first, and returning to the baked version.
+The VM service can alternatively read `BB_APP_URL` from `/etc/default/bb`, but `bb-app config set` wins whenever both are set: it writes `~/.bb/config.json`, which bb reads after the service environment. Do not bake a shared hostname into the image. Loopback health checks alone do not verify that the public hostname is accepted. The service enables bb's in-app update channel; see [Updating bb within an image](running.md#updating-bb-within-an-image) for applying updates, backing up first, and returning to the baked version.
 
-Configure the root HTTP proxy target explicitly before testing HTTPS access:
+Configure the root HTTP proxy target explicitly before testing HTTPS access. The listener has to be routable first, because the proxy cannot reach a loopback-bound bb:
 
 ```bash
+ssh my-bb.exe.xyz
+printf 'BB_SERVER_BIND_HOST=0.0.0.0\n' | sudo tee -a /etc/default/bb
+sudo systemctl restart bb.service
+exit
+
 ssh exe.dev share port my-bb 3000
 ```
+
+The guest's interactive reminder points at this opt-in while the listener is loopback; it stops once the listener is routable. Precedence and the first-boot rule are in [The VM listener](running.md#the-vm-listener).
 
 Then open `https://my-bb.exe.xyz/api/v1/hosts` in a browser authenticated for the VM's private proxy. An unauthenticated `curl` is not a reliable bb health check; the loopback command above checks bb independently of proxy authentication.
 
@@ -66,7 +73,7 @@ The `exedev` flavor derives from the systemd `vm` flavor and adds the exe.dev in
 
 - systemd runs as root at PID 1
 - `/usr/local/bin/init` prepares `/run/systemd` and cgroup v2, then executes `/sbin/init`
-- `bb.service` runs as `developer` and serves bb on port `3000`
+- `bb.service` runs as `developer` and serves bb on `127.0.0.1:3000` by default; a routable listener is the `/etc/default/bb` opt-in
 - `developer` initially has passwordless guest sudo, without a shared password or root-only enable step
 - `openssh-server` tooling is installed, but its guest service and socket are disabled
 - `exe.dev/login-user=developer` selects the project account for exe.dev SSH access; no `EXPOSE 3000` declaration is baked in, so configure the proxy target explicitly if needed
@@ -103,7 +110,7 @@ Build and run the image checks before publishing:
 make ci FLAVOR=exedev TAG=exedev
 ```
 
-The container checks inspect the image's files, labels, unit symlinks, and bb unit without requiring systemd in the check container. The host gate boots the image under smolvm and exercises the systemd and bb service contract:
+The container checks inspect the image's files, labels, unit symlinks, and bb unit without requiring systemd in the check container. The host gate boots the image under smolvm and exercises the systemd, listener and bb service contract:
 
 ```bash
 make check-smolvm-systemd FLAVOR=exedev TAG=exedev
