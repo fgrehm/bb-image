@@ -16,9 +16,13 @@ Environment=MISE_GLOBAL_CONFIG_FILE=/opt/mise/config.toml
 Environment=PATH=/opt/mise/shims:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 Environment=PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
 Environment=FONTCONFIG_FILE=/usr/local/share/bb/fonts.conf
+# Image-owned defaults first, then the operator file: systemd applies
+# EnvironmentFile= in order and the later file wins per variable. bb's own
+# ~/.bb/env.json still outranks both. See docs/running.md.
+EnvironmentFile=-/etc/bb/listener.env
 EnvironmentFile=-/etc/default/bb
 ExecStartPre=/usr/local/share/bb/hydrate-home.sh install
-ExecStart=/opt/mise/shims/bb-app --server-bind-host 0.0.0.0 --server-port 38886
+ExecStart=/opt/mise/shims/bb-app
 Restart=on-failure
 RestartSec=2s
 TimeoutStopSec=20s

@@ -3,7 +3,7 @@
 # check-scope: repo
 
 say "default bb starts keep in-app updates enabled"
-for source in container/entrypoint.sh container/bb.service container/exedev-bb.service; do
+for source in container/entrypoint.sh container/bb.service; do
 	if grep -Fq -- '--no-in-app-updates' "$root/$source"; then
 		echo "$source disables bb in-app updates by default" >&2
 		exit 1

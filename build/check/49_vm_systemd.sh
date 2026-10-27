@@ -34,8 +34,30 @@ unit="$(cat /etc/systemd/system/bb.service)"
 printf '%s\n' "$unit" | grep -qx 'User=developer'
 printf '%s\n' "$unit" | grep -qx 'WorkingDirectory=/home/developer'
 printf '%s\n' "$unit" | grep -qx 'ExecStartPre=/usr/local/share/bb/hydrate-home.sh install'
-printf '%s\n' "$unit" | grep -qx 'ExecStart=/opt/mise/shims/bb-app --server-bind-host 0.0.0.0 --server-port 38886'
+printf '%s\n' "$unit" | grep -qx 'ExecStart=/opt/mise/shims/bb-app'
 printf '%s\n' "$unit" | grep -qx 'WantedBy=multi-user.target'
+
+# The listener is bb's own environment contract, not a unit flag: the image
+# default is read first and the operator file after it, so a later variable wins.
+envfiles="$(printf '%s\n' "$unit" | grep '^EnvironmentFile=')"
+expected_envfiles='EnvironmentFile=-/etc/bb/listener.env
+EnvironmentFile=-/etc/default/bb'
+[ "$envfiles" = "$expected_envfiles" ] || {
+	echo "the unit's environment files are not the expected pair in order: $envfiles" >&2
+	exit 1
+}
+if printf '%s\n' "$unit" | grep -qE -- '--server-(bind-host|port)'; then
+	echo "the unit still hardcodes the listener instead of reading the environment" >&2
+	exit 1
+fi
+
+[ "$(stat -c '%U:%a' /etc/bb/listener.env)" = root:644 ]
+grep -qx 'BB_SERVER_BIND_HOST=127.0.0.1' /etc/bb/listener.env
+grep -qx 'BB_SERVER_PORT=38886' /etc/bb/listener.env
+if grep -q 'BB_SERVER_PORT=' /etc/default/bb 2>/dev/null; then
+	echo "the image ships an operator override in /etc/default/bb" >&2
+	exit 1
+fi
 
 [ ! -s /etc/machine-id ] || {
 	echo "the image bakes a machine identity; each VM must initialize its own" >&2

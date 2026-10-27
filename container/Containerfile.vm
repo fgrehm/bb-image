@@ -28,6 +28,9 @@ COPY --chmod=0644 container/user-manager-mise.conf /etc/systemd/system/user@1000
 COPY --chmod=0644 container/containers-vm-podman.conf /etc/containers/containers.conf
 COPY --chmod=0644 container/podman-tun.conf /etc/tmpfiles.d/bb-podman-tun.conf
 COPY --chmod=0644 container/bb.service /etc/systemd/system/bb.service
+# The listener comes from bb's own environment variables. This file is the
+# image default; /etc/default/bb is the operator override and is read after it.
+COPY --chmod=0644 container/listener-vm.env /etc/bb/listener.env
 RUN set -e; \
     systemctl enable bb.service \
     && rm -f /etc/machine-id /var/lib/dbus/machine-id \

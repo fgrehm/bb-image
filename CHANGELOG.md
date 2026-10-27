@@ -10,6 +10,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - Update the bundled bb app to 0.47.1.
 - Refresh the Debian 13 base digest and rebuild against current trixie-security: OpenSSL (10 CVEs), pcre2 and xz-utils fixes, plus the ca-certificates update that removes the compromised eMudhra and Comodo roots.
+- The VM flavors read the listener from bb's own `BB_SERVER_BIND_HOST` and `BB_SERVER_PORT` and bind `127.0.0.1` by default (`38886` on `vm`, `3000` on `exedev`). A published port, the exe.dev proxy, or Tailscale Serve now needs the opt-in in `docs/running.md`.
+
+### Security
+
+- bb in the `vm` and `exedev` flavors no longer listens on a routable interface by default. Set `BB_SERVER_BIND_HOST=0.0.0.0` in `/etc/default/bb` and restart `bb.service` to expose it.
 
 ## [0.7.0] - 2026-10-19
 

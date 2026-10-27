@@ -18,7 +18,8 @@ RUN set -e; \
     && rm -f /etc/ssh/ssh_host_*_key /etc/ssh/ssh_host_*_key.pub
 
 COPY --chmod=0755 container/exedev-init.sh /usr/local/bin/init
-COPY --chmod=0644 container/exedev-bb.service /etc/systemd/system/bb.service
+# exe.dev inherits the shared VM unit; only the listener default differs.
+COPY --chmod=0644 container/listener-exedev.env /etc/bb/listener.env
 RUN set -e; \
     systemctl enable bb.service \
     && systemctl disable ssh.service \

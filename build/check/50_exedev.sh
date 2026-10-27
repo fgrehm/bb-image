@@ -13,8 +13,17 @@ set -eu
 grep -q '^exec /sbin/init' /usr/local/bin/init
 [ -L /etc/systemd/system/multi-user.target.wants/bb.service ]
 [ -f /etc/systemd/system/bb.service ]
-grep -q 'User=developer' /etc/systemd/system/bb.service
-grep -q 'ExecStart=.*bb-app --server-bind-host 0.0.0.0 --server-port 3000' /etc/systemd/system/bb.service
+grep -qx 'User=developer' /etc/systemd/system/bb.service
+grep -qx 'ExecStart=/opt/mise/shims/bb-app' /etc/systemd/system/bb.service
+if grep -qE -- '--server-(bind-host|port)' /etc/systemd/system/bb.service; then
+	echo "exedev hardcodes the listener instead of sharing the VM unit" >&2
+	exit 1
+fi
+# exedev inherits the shared unit from vm and replaces only the image default.
+# Port 3000 is the exe.dev proxy's first forwarded port; if this file were
+# missing, bb would silently fall back to the VM default on 38886.
+grep -qx 'BB_SERVER_BIND_HOST=127.0.0.1' /etc/bb/listener.env
+grep -qx 'BB_SERVER_PORT=3000' /etc/bb/listener.env
 [ "$(id -u developer)" = 1000 ]
 [ -x /usr/sbin/sshd ]
 [ ! -e /etc/systemd/system/multi-user.target.wants/ssh.service ]
