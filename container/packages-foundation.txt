@@ -61,9 +61,10 @@ sqlite3
 #
 # htop and tree replace the ad-hoc equivalents agents hand-write. dnsutils and
 # iputils-ping are the two halves of "why is this not connecting", which is the
-# most common question about the published port. net-tools keeps netstat and
-# ifconfig alongside the iproute2 tools, because both spellings are what
-# documentation and older runbooks assume.
+# most common question about the published port. iproute2 provides `ip` and
+# `ss`, which is what the docs and the VM gate ask for; net-tools keeps netstat
+# and ifconfig alongside them, because older runbooks and agent habits use both
+# spellings. Debian's minimal base carries neither, so both are explicit here.
 #
 # strace and tcpdump are the heavier two and the reason to look twice before
 # adding them here rather than to packages-full.txt: both are inert until
@@ -74,6 +75,7 @@ sqlite3
 dnsutils
 htop
 iputils-ping
+iproute2
 lsof
 net-tools
 strace
