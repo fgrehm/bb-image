@@ -40,7 +40,7 @@ Start with **full** unless you need a smaller server, a VM, or a separate execut
 
 Every flavor includes Node.js, mise, Git, SSH client tooling, sudo, and backup utilities. Some tools are baked into the image; others install on first use. See [Tools and home state](docs/tooling.md) for availability and project-specific version pins. Workers require manual enrollment with a bb server.
 
-VM flavors boot systemd and use a persistent machine disk, not the container launch command above. For smolvm, use the default VM-grade workload profile rather than `--unprivileged`. On exe.dev, SSH connects as `developer`; configure the bb proxy target explicitly as described in its guide.
+VM flavors boot systemd and use a persistent machine disk, not the container launch command above. For smolvm, use the default VM-grade workload profile rather than `--unprivileged`. Both VM flavors bind bb to `127.0.0.1` by default, so the local smoke examples publish a `13xxx` host port and anything reaching bb from outside, including the exe.dev proxy, needs the listener opt-in in [The VM listener](docs/running.md#the-vm-listener). On exe.dev, SSH connects as `developer`; configure the proxy target explicitly as described in its guide.
 
 ## Choose a tag
 

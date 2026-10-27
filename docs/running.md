@@ -1,6 +1,6 @@
 # Running bb
 
-This guide covers the rootless container flavors. The `vm` flavor boot systemd under smolvm instead; see [Running as a microVM](smolvm.md).
+This guide covers the rootless container flavors. The `vm` flavor boots systemd under smolvm instead; see [Running as a microVM](smolvm.md).
 
 ```bash
 make build
