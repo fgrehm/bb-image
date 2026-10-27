@@ -1,6 +1,6 @@
 # bb-image
 
-Container and VM images for running [bb](https://getbb.app) with development tools and persistent state. Published at `ghcr.io/fgrehm/bb`, supported on **Linux amd64 (`linux/amd64`)**.
+Container and VM images for running [bb](https://getbb.app) with development tools and persistent state. Published at `ghcr.io/fgrehm/bb`, supported on **Linux amd64 (`linux/amd64`)** for every flavor and **Linux arm64 (`linux/arm64`)** for the container flavors (`full`, `slim`, `worker`).
 
 ## Quick start
 

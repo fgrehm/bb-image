@@ -6,6 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- `linux/arm64` images for the `full`, `slim` and `worker` flavors, built and verified on native arm64 runners. The VM flavors stay `linux/amd64` only.
+
+### Changed
+
+- Pin the Debian 13 base by its multi-platform index digest instead of the amd64 child digest.
+
 ## [0.8.0] - 2026-10-27
 
 Carries bb 0.47.1.

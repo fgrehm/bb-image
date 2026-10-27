@@ -53,7 +53,7 @@ done
 
 matrix="$(sh "$root/build/manifest.sh" matrix)"
 printf '%s\n' "$matrix" | jq -e '.include | type == "array"' >/dev/null
-matrix_flavors="$(printf '%s\n' "$matrix" | jq -r '.include[].flavor' | sort)"
+matrix_flavors="$(printf '%s\n' "$matrix" | jq -r '.include[].flavor' | sort -u)"
 same_set "generated matrix differs from the published set" "$published" "$matrix_flavors"
 printf '%s\n' "$matrix" | jq -e '
   [.include[] | select(
@@ -63,7 +63,17 @@ printf '%s\n' "$matrix" | jq -e '
     (.flavor == "exedev" and .suffix == "-exedev" and .smolvm == true and .boot == true) or
     (.flavor == "worker" and .suffix == "-worker" and .smolvm == false and .boot == false) or
     (.flavor == "worker-vm" and .suffix == "-worker-vm" and .smolvm == true and .boot == false)
-  )] | length == 6
+  )] | length == 9
+' >/dev/null
+printf '%s\n' "$matrix" | jq -e '
+  [.include[] | "\(.flavor)/\(.arch)/\(.runner)"] | sort == [
+    "exedev/amd64/ubuntu-24.04",
+    "full/amd64/ubuntu-24.04", "full/arm64/ubuntu-24.04-arm",
+    "slim/amd64/ubuntu-24.04", "slim/arm64/ubuntu-24.04-arm",
+    "vm/amd64/ubuntu-24.04",
+    "worker-vm/amd64/ubuntu-24.04",
+    "worker/amd64/ubuntu-24.04", "worker/arm64/ubuntu-24.04-arm"
+  ]
 ' >/dev/null
 
 workflow="$root/.github/workflows/publish.yml"

@@ -55,7 +55,7 @@ if [ "$FLAVOR" = worker-vm ]; then
 	[ ! -e /var/lib/dbus/machine-id ]
 	[ -d /etc/systemd/system/user@1000.service.d ]
 	[ -f /etc/systemd/system/user@1000.service.d/mise.conf ]
-	[ -f /lib/x86_64-linux-gnu/security/pam_systemd.so ]
+	[ -f "/lib/$(uname -m)-linux-gnu/security/pam_systemd.so" ]
 else
 	[ ! -e /sbin/init ] || { echo "container worker unexpectedly carries systemd" >&2; exit 1; }
 fi

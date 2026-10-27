@@ -23,12 +23,6 @@ env:
   # Publishes ghcr.io/fgrehm/bb. Deliberately not github.repository, since the
   # repo is named bb-image but the image is bb.
   IMAGE_NAME: ${{ github.repository_owner }}/bb
-  # linux/arm64 is deferred, not ruled out. node-pty and better-sqlite3 fall back
-  # to node-gyp when no prebuild matches, and node-gyp needs python3 at build
-  # time, which the image does not carry at that stage. Adding arm64 here also
-  # means adding a docker/setup-qemu-action step; emulation is the only reason
-  # that step exists, and it is dead weight while the platform list stays native.
-  PLATFORMS: linux/amd64
   # Host gate for the VM flavor. The archive and its checksum are fetched from
   # the matching upstream release rather than piping an installer into CI.
   SMOLVM_VERSION: 1.18.2
@@ -39,6 +33,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       include: ${{ steps.gen.outputs.include }}
+      flavors: ${{ steps.gen.outputs.flavors }}
     steps:
       - uses: actions/checkout@v7
       - id: gen
@@ -46,10 +41,15 @@ jobs:
         run: |
           set -euo pipefail
           printf 'include=%s\n' "$(sh build/manifest.sh matrix)" >> "$GITHUB_OUTPUT"
+          printf 'flavors=%s\n' "$(sh build/manifest.sh published | jq -Rnc '[inputs]')" >> "$GITHUB_OUTPUT"
 
+  # One job per flavor and platform, each on a native runner: the matrix
+  # carries the arch and its runner, so nothing is emulated and every platform
+  # passes its own make check before anything is pushed. The merge job below
+  # joins the per-platform digests under the shared tags.
   publish:
     needs: [matrix]
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
     strategy:
       # A variant that fails blocks the release: do not publish full while a
       # variant someone depends on failed its own verification.
@@ -159,9 +159,9 @@ jobs:
           set: |
             ${{ matrix.flavor }}.tags=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:staged-${{ matrix.flavor }}
             ${{ matrix.flavor }}.output=type=docker
-            *.platform=${{ env.PLATFORMS }}
-            *.cache-from=type=gha
-            *.cache-to=type=gha,mode=max
+            *.platform=${{ matrix.platform }}
+            *.cache-from=type=gha,scope=${{ matrix.arch }}
+            *.cache-to=type=gha,scope=${{ matrix.arch }},mode=max
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -245,7 +245,11 @@ jobs:
 
       # A workflow_dispatch on a feature branch is build-and-verify only. The
       # metadata tag rules are intentionally limited to main and release tags.
+      # Pushed by digest, untagged: a tag names the multi-platform index, which
+      # only exists once every platform of the flavor has verified. The merge
+      # job creates it from the digests uploaded below.
       - name: Build and push
+        id: push
         if: github.ref == 'refs/heads/main' || github.ref_type == 'tag'
         uses: docker/bake-action@v7
         with:
@@ -255,13 +259,85 @@ jobs:
             ./docker-bake.meta.json
           targets: ${{ matrix.flavor }}
           set: |
-            ${{ matrix.flavor }}.output=type=registry
-            *.platform=${{ env.PLATFORMS }}
-            *.cache-from=type=gha
+            ${{ matrix.flavor }}.tags=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+            ${{ matrix.flavor }}.output=type=image,push-by-digest=true,name-canonical=true,push=true
+            *.platform=${{ matrix.platform }}
+            *.cache-from=type=gha,scope=${{ matrix.arch }}
           provenance: true
           sbom: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Every platform of a flavor derives the same tags, so each writes them
+      # beside its digest and the merge job reads whichever copy it finds.
+      - name: Export digest
+        if: github.ref == 'refs/heads/main' || github.ref_type == 'tag'
+        shell: bash
+        env:
+          METADATA: ${{ steps.push.outputs.metadata }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+          digest="$(jq -r --arg f '${{ matrix.flavor }}' '.[$f]["containerimage.digest"]' <<< "$METADATA")"
+          [[ "$digest" == sha256:* ]] || { echo "no digest in bake metadata" >&2; exit 1; }
+          mkdir -p /tmp/digests
+          touch "/tmp/digests/${digest#sha256:}"
+          printf '%s\n' "$TAGS" > /tmp/digests/tags.txt
+
+      - name: Upload digest
+        if: github.ref == 'refs/heads/main' || github.ref_type == 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.flavor }}-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # Joins each flavor's per-platform digests into one multi-platform index
+  # under its tags. Waits for every publish job, so no tag moves while any
+  # platform of any flavor failed verification.
+  merge:
+    if: github.ref == 'refs/heads/main' || github.ref_type == 'tag'
+    needs: [matrix, publish]
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        flavor: ${{ fromJSON(needs.matrix.outputs.flavors) }}
+    permissions:
+      packages: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-${{ matrix.flavor }}-*
+          merge-multiple: true
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create and push tags
+        working-directory: /tmp/digests
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag_args=()
+          while IFS= read -r t; do
+            [ -n "$t" ] && tag_args+=(-t "$t")
+          done < tags.txt
+          [ "${#tag_args[@]}" -gt 0 ] || { echo "no tags for ${{ matrix.flavor }}" >&2; exit 1; }
+          sources=()
+          for d in *; do
+            [ "$d" = tags.txt ] || sources+=("${REGISTRY}/${IMAGE_NAME}@sha256:${d}")
+          done
+          docker buildx imagetools create "${tag_args[@]}" "${sources[@]}"
+          docker buildx imagetools inspect "${tag_args[1]}"
 
   # States the bb move explicitly, since that is what users actually care
   # about and a git tag cannot express it. Depends on every publish job, so no
@@ -269,7 +345,7 @@ jobs:
   # an existing release alone rather than failing.
   release:
     if: github.ref_type == 'tag'
-    needs: [publish]
+    needs: [merge]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
