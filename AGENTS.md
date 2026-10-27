@@ -205,7 +205,7 @@ revisions that were never touched:
 
 ```bash
 podman run -d --name bbtest -p 127.0.0.1:39999:38886 --userns=keep-id bb:dev
-until podman logs bbtest 2>&1 | grep -q "Host daemon started"; do sleep 1; done
+until podman logs bbtest 2>&1 | grep -q "bb is ready"; do sleep 1; done
 podman stop -t 20 bbtest   # then confirm exit code 0, not 143 or 137
 ```
 

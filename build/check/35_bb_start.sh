@@ -35,14 +35,14 @@ created=1
 
 ready=0
 for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
-	if "$ENGINE" logs "$name" 2>&1 | grep -q "Host daemon started"; then
+	if "$ENGINE" logs "$name" 2>&1 | grep -q "bb is ready"; then
 		ready=1
 		break
 	fi
 	sleep 1
 done
 [ "$ready" = 1 ] || {
-	echo "bb did not report 'Host daemon started' within 20s" >&2
+	echo "bb did not report 'bb is ready' within 20s" >&2
 	exit 1
 }
 "$ENGINE" stop -t 20 "$name" >/dev/null

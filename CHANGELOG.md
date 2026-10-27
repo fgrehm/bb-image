@@ -8,6 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- Update the bundled bb app to 0.47.1.
 - Refresh the Debian 13 base digest and rebuild against current trixie-security: OpenSSL (10 CVEs), pcre2 and xz-utils fixes, plus the ca-certificates update that removes the compromised eMudhra and Comodo roots.
 
 ## [0.7.0] - 2026-10-19
