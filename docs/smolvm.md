@@ -39,17 +39,20 @@ A lingering `developer` systemd user manager supplies delegated cgroups, so root
 
 The VM uses Debian 13's Podman 5 package. This is intentional: rootless `pasta` networking did not work in the smolvm guest, while `slirp4netns` did. Podman 6 removes `slirp4netns` ([upstream change](https://github.com/podman-container-tools/podman/pull/27828)), so changing the Podman major version or Debian base requires a successful rootless networking test first. The guest kernel also lacks swap-limit support; Podman can enforce a memory limit without a swap limit.
 
-All systemd VM flavors use the repository's host gate. The exedev variant uses its own Smolfile and port 3000:
+All systemd VM flavors use the repository's host gate. The exedev variant uses its own Smolfile: bb listens on `3000` in the guest, and the local smoke maps it to host port `13000`, so a dev server already on 3000 does not collide. If 13000 is taken too, move the host side without editing the example:
 
 ```bash
 make ci FLAVOR=vm TAG=vm
 make check-smolvm-systemd FLAVOR=vm TAG=vm
 make check-smolvm-podman FLAVOR=vm TAG=vm
 
-# The exe.dev adapter uses the same systemd smoke gate and checks bb on port 3000.
+# The exe.dev adapter uses the same gate; bb is checked on guest port 3000.
 make ci FLAVOR=exedev TAG=exedev
 make check-smolvm-systemd FLAVOR=exedev TAG=exedev
 make check-smolvm-podman FLAVOR=exedev TAG=exedev
+
+# Host port 13000 is busy on your machine:
+SMOLVM_HOST_PORT=14000 make check-smolvm-systemd FLAVOR=exedev TAG=exedev
 ```
 
 Each `make check-smolvm-systemd` invocation requires a host with smolvm and KVM/libkrun. It asserts systemd as workload PID 1, `multi-user.target`, bb service and API health, the loopback listener default with the `/etc/default/bb` opt-in and its removal, persistent home state, recovery after stop/start, and bounded shutdown. `make check-smolvm-podman` boots a separate disposable VM and checks rootless Podman, delegated cgroups, slirp networking, port publishing, and the absence of an API socket.

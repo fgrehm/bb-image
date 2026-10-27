@@ -1,10 +1,15 @@
 # Local smolvm smoke definition for the exedev image. exe.dev uses the same
 # systemd/SSH contract, but does not use a Smolfile.
+#
+# The guest port stays 3000: that is what the flavor listens on and what the
+# exe.dev proxy forwards. The host side is 13000 so a dev server already on
+# 3000 does not block the local smoke run. The host gate can move it again with
+# SMOLVM_HOST_PORT=<port> without editing this file.
 image = "bb:exedev"
 net = true
 
 [dev]
-ports = ["3000:3000"]
+ports = ["13000:3000"]
 
 [health]
 exec = ["curl", "-fsS", "http://127.0.0.1:3000/api/v1/hosts"]

@@ -23,6 +23,7 @@ Carries bb 0.47.1.
 
 ### Fixed
 
+- The local exedev smolvm example maps host port 13000 instead of 3000, so a dev server already on 3000 no longer blocks it. The guest port stays 3000. `SMOLVM_HOST_PORT=<port>` moves the host side further when needed.
 - Correct the `BB_APP_URL` precedence in the docs: `bb-app config set` writes `~/.bb/config.json`, which bb reads after the service environment, so it wins over `/etc/default/bb` rather than being interchangeable with it.
 
 ### Security

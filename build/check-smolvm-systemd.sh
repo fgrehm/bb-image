@@ -38,6 +38,27 @@ cleanup() {
 trap cleanup EXIT HUP INT TERM
 mkdir -p "$tmp"
 
+# The examples pick a host port that is unlikely to be taken, and the gate's own
+# assertions run inside the guest, so the mapping is only for a local publish.
+# When the host port is busy anyway, rewrite the host side of the example in a
+# temp copy; the guest port stays whatever the flavor ships.
+if [ -n "${SMOLVM_HOST_PORT:-}" ]; then
+	case "$SMOLVM_HOST_PORT" in
+	*[!0-9]*)
+		echo "SMOLVM_HOST_PORT must be a port number, got '$SMOLVM_HOST_PORT'" >&2
+		exit 1
+		;;
+	esac
+	rewritten="$tmp/Smolfile"
+	sed "s/^ports = \[\"[0-9][0-9]*:$port\"\]/ports = [\"$SMOLVM_HOST_PORT:$port\"]/" \
+		"$smolfile" >"$rewritten"
+	grep -qx "ports = \[\"$SMOLVM_HOST_PORT:$port\"\]" "$rewritten" || {
+		echo "could not rewrite the host port in $smolfile" >&2
+		exit 1
+	}
+	smolfile="$rewritten"
+fi
+
 stop_cleanly() {
 	status=0
 	output="$(timeout 30 "$SMOLVM" machine stop --name "$name" 2>&1)" || status=$?
