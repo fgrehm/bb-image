@@ -16,7 +16,7 @@ Carries bb 0.47.1.
 
 ### Changed
 
-- The `vm` and `exedev` flavors read the listener from bb's own `BB_SERVER_BIND_HOST` and `BB_SERVER_PORT` instead of a hardcoded unit flag, and bind `127.0.0.1` by default (`38886` on `vm`, `3000` on `exedev`). A published port, the exe.dev proxy, or Tailscale Serve now needs `BB_SERVER_BIND_HOST=0.0.0.0` in `/etc/default/bb` and a restart of `bb.service`. bb's own `~/.bb/env.json` still outranks that file.
+- The `vm` and `exedev` flavors read the listener from bb's own `BB_SERVER_BIND_HOST` and `BB_SERVER_PORT` instead of a hardcoded unit flag, and bind `127.0.0.1` by default (`38886` on `vm`, `3000` on `exedev`). A published port or the exe.dev proxy now needs `BB_SERVER_BIND_HOST=0.0.0.0` in `/etc/default/bb` and a restart of `bb.service`; a guest-side proxy such as Tailscale Serve continues to target bb on loopback. bb's own `~/.bb/env.json` still outranks that file.
 - Update the bundled bb app to 0.47.1.
 - Update mise to 2026.10.21, Node.js to 26.12.1, Ruby to 4.0.9, Bun to 1.4.4, Go to 1.27.3, Rust to 1.99.1, Python to 3.15.2, GitHub CLI to 2.103.2 and pnpm to 12.15.0. Node moves a major version; a derived image that pins its own Node must reinstall bb into it.
 - Refresh the Debian 13 base digest and rebuild against current trixie-security: OpenSSL (10 CVEs), pcre2 and xz-utils fixes, plus the `ca-certificates` update that removes the compromised eMudhra and Comodo roots.
