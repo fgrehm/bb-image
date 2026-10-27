@@ -160,8 +160,8 @@ jobs:
             ${{ matrix.flavor }}.tags=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:staged-${{ matrix.flavor }}
             ${{ matrix.flavor }}.output=type=docker
             *.platform=${{ matrix.platform }}
-            *.cache-from=type=gha,scope=${{ matrix.arch }}
-            *.cache-to=type=gha,scope=${{ matrix.arch }},mode=max
+            *.cache-from=type=gha,scope=bb-${{ matrix.flavor }}-${{ matrix.arch }}
+            *.cache-to=type=gha,scope=bb-${{ matrix.flavor }}-${{ matrix.arch }},mode=max
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -262,7 +262,7 @@ jobs:
             ${{ matrix.flavor }}.tags=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
             ${{ matrix.flavor }}.output=type=image,push-by-digest=true,name-canonical=true,push=true
             *.platform=${{ matrix.platform }}
-            *.cache-from=type=gha,scope=${{ matrix.arch }}
+            *.cache-from=type=gha,scope=bb-${{ matrix.flavor }}-${{ matrix.arch }}
           provenance: true
           sbom: true
         env:
