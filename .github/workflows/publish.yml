@@ -274,11 +274,14 @@ jobs:
         if: github.ref == 'refs/heads/main' || github.ref_type == 'tag'
         shell: bash
         env:
-          METADATA: ${{ steps.push.outputs.metadata }}
+          # The full Bake metadata embeds build provenance and can exceed the
+          # runner's environment-size limit. Extract just this flavor's digest
+          # in the expression context; only the small digest enters the shell.
+          DIGEST: ${{ fromJSON(steps.push.outputs.metadata)[matrix.flavor]['containerimage.digest'] }}
           TAGS: ${{ steps.meta.outputs.tags }}
         run: |
           set -euo pipefail
-          digest="$(jq -r --arg f '${{ matrix.flavor }}' '.[$f]["containerimage.digest"]' <<< "$METADATA")"
+          digest="$DIGEST"
           [[ "$digest" == sha256:* ]] || { echo "no digest in bake metadata" >&2; exit 1; }
           mkdir -p /tmp/digests
           touch "/tmp/digests/${digest#sha256:}"
