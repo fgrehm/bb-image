@@ -12,6 +12,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- Update mise to 2026.10.21, Node.js to 26.12.1, Ruby to 4.0.9, Bun to 1.4.4, Go to 1.27.3, Rust to 1.99.1, Python to 3.15.2, GitHub CLI to 2.103.2 and pnpm to 12.15.0. Node moves a major version; a derived image that pins its own Node must reinstall bb into it.
 - Update the bundled bb app to 0.47.1.
 - Refresh the Debian 13 base digest and rebuild against current trixie-security: OpenSSL (10 CVEs), pcre2 and xz-utils fixes, plus the ca-certificates update that removes the compromised eMudhra and Comodo roots.
 - The VM flavors read the listener from bb's own `BB_SERVER_BIND_HOST` and `BB_SERVER_PORT` and bind `127.0.0.1` by default (`38886` on `vm`, `3000` on `exedev`). A published port, the exe.dev proxy, or Tailscale Serve now needs the opt-in in `docs/running.md`.

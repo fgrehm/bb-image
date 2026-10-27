@@ -44,7 +44,7 @@ UV_CACHE_DIR = "{{ env.HOME }}/.cache/uv"
 # declares it. That separation is what stops a toolset edit from re-downloading
 # node and reinstalling bb. The build asserts the versions match and fails with a
 # readable error if they drift, so bump both together.
-node = "24.21.0"
+node = "26.12.1"
 
 # Also installed at image build time. Small, used constantly, and the toolchain is not
 # volume-backed, so anything lazy here would be re-fetched in every fresh container.
@@ -71,12 +71,12 @@ gitleaks   = "8.30.1"
 
 # First use only. Bootstrap shims are created at build time and install
 # these on first invocation.
-ruby = { version = "4.0.7", lazy = true }
-bun = { version = "1.4.3", lazy = true }
-go = { version = "1.27.2", lazy = true }
-rust = { version = "1.99.0", lazy = true }
-python = { version = "3.14.8", lazy = true }
-gh = { version = "2.102.0", lazy = true }
+ruby = { version = "4.0.9", lazy = true }
+bun = { version = "1.4.4", lazy = true }
+go = { version = "1.27.3", lazy = true }
+rust = { version = "1.99.1", lazy = true }
+python = { version = "3.15.2", lazy = true }
+gh = { version = "2.103.2", lazy = true }
 
 # pnpm is here because agents meet pnpm projects, not because bb uses it. bb detects
 # package managers to report them and installs its plugins with npm, never pnpm. The
@@ -87,7 +87,7 @@ gh = { version = "2.102.0", lazy = true }
 # and runs whatever version a project declares in packageManager. Note that pnpm 10 and
 # later refuse to run dependency lifecycle scripts unless they are allow-listed, which is
 # why a native dependency can install cleanly and still be broken. `pnpm approve-builds`.
-pnpm = { version = "12.10.1", lazy = true }
+pnpm = { version = "12.15.0", lazy = true }
 
 # Pre-commit hooks. Deliberately unpinned.
 prek = { version = "latest", lazy = true }
