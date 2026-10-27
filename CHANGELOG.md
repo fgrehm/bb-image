@@ -6,21 +6,29 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-27
+
+Carries bb 0.47.1.
+
 ### Added
 
-- Install iproute2, so `ip` and `ss` are available in every flavor beside net-tools' `netstat` and `ifconfig`.
-- An interactive-shell reminder in the VM flavors says that bb listens on loopback only and prints the opt-in command, following the passwordless-sudo reminder's pattern and suppression rules.
+- `ip` and `ss` are now available in every flavor, from iproute2, beside net-tools' `netstat` and `ifconfig`. The docs and the VM gate already assumed them.
+- Interactive shells in the `vm` and `exedev` flavors say that bb listens on loopback only and print the opt-in command, following the passwordless-sudo reminder's suppression rules (`BB_LISTENER_REMINDER=0` or the config marker). Container flavors stay silent.
 
 ### Changed
 
-- Update mise to 2026.10.21, Node.js to 26.12.1, Ruby to 4.0.9, Bun to 1.4.4, Go to 1.27.3, Rust to 1.99.1, Python to 3.15.2, GitHub CLI to 2.103.2 and pnpm to 12.15.0. Node moves a major version; a derived image that pins its own Node must reinstall bb into it.
+- The `vm` and `exedev` flavors read the listener from bb's own `BB_SERVER_BIND_HOST` and `BB_SERVER_PORT` instead of a hardcoded unit flag, and bind `127.0.0.1` by default (`38886` on `vm`, `3000` on `exedev`). A published port, the exe.dev proxy, or Tailscale Serve now needs `BB_SERVER_BIND_HOST=0.0.0.0` in `/etc/default/bb` and a restart of `bb.service`. bb's own `~/.bb/env.json` still outranks that file.
 - Update the bundled bb app to 0.47.1.
-- Refresh the Debian 13 base digest and rebuild against current trixie-security: OpenSSL (10 CVEs), pcre2 and xz-utils fixes, plus the ca-certificates update that removes the compromised eMudhra and Comodo roots.
-- The VM flavors read the listener from bb's own `BB_SERVER_BIND_HOST` and `BB_SERVER_PORT` and bind `127.0.0.1` by default (`38886` on `vm`, `3000` on `exedev`). A published port, the exe.dev proxy, or Tailscale Serve now needs the opt-in in `docs/running.md`.
+- Update mise to 2026.10.21, Node.js to 26.12.1, Ruby to 4.0.9, Bun to 1.4.4, Go to 1.27.3, Rust to 1.99.1, Python to 3.15.2, GitHub CLI to 2.103.2 and pnpm to 12.15.0. Node moves a major version; a derived image that pins its own Node must reinstall bb into it.
+- Refresh the Debian 13 base digest and rebuild against current trixie-security: OpenSSL (10 CVEs), pcre2 and xz-utils fixes, plus the `ca-certificates` update that removes the compromised eMudhra and Comodo roots.
+
+### Fixed
+
+- Correct the `BB_APP_URL` precedence in the docs: `bb-app config set` writes `~/.bb/config.json`, which bb reads after the service environment, so it wins over `/etc/default/bb` rather than being interchangeable with it.
 
 ### Security
 
-- bb in the `vm` and `exedev` flavors no longer listens on a routable interface by default. Set `BB_SERVER_BIND_HOST=0.0.0.0` in `/etc/default/bb` and restart `bb.service` to expose it.
+- bb in the `vm` and `exedev` flavors no longer listens on a routable interface by default. Expose it deliberately with `BB_SERVER_BIND_HOST=0.0.0.0` in `/etc/default/bb`, then restart `bb.service`.
 
 ## [0.7.0] - 2026-10-19
 
