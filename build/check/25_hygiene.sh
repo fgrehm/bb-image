@@ -9,8 +9,9 @@
 # tree as it stands (including uncommitted files). gitleaks is baked into the
 # full flavor's toolset so this scan runs offline like the lint pass, and the
 # release can never ship a tree that carries a secret. This is repo-side only;
-# scan 95_token_scan is its counterpart on the built image's filesystem, where
-# the forwarded build token is the one input that must be absent.
+# the token scan in 95_image_hygiene is its counterpart on the built image's
+# filesystem, where the forwarded build token is the one input that must be
+# absent.
 say "the repo tree and its full history carry no leaked secrets"
 # Git refuses a repository owned by another uid ('dubious ownership'), which is
 # exactly a Docker bind mount into this container on a CI runner, where the
@@ -25,4 +26,21 @@ export GIT_CONFIG_VALUE_0=/src
 gitleaks git --no-banner /src
 gitleaks dir --no-banner /src
 echo "no leaks in history or tree"
+SH
+
+# Lints every script in the repo, by the baked shfmt and shellcheck inside the
+# image itself; catches a bad edit in fontconfig.sh or in here before the
+# slower checks run.
+say "scripts pass shfmt and shellcheck"
+crun --volume "$root:/src:ro" <<'SH'
+set -eu
+cd /src
+fmt="$(shfmt -d build container 2>&1)" || {
+	echo "$fmt" >&2
+	exit 1
+}
+shellcheck build/build.sh build/check.sh build/check-smolvm-systemd.sh build/check-smolvm-podman.sh \
+	build/check/*.sh container/entrypoint.sh \
+	container/fontconfig.sh container/hydrate-home.sh container/bb-backup
+echo "shfmt and shellcheck ok"
 SH

@@ -4,6 +4,9 @@
 # shellcheck source=build/check/lib.sh
 # check-flavors: full slim worker vm exedev worker-vm
 
+# Two filesystem-hygiene contracts: the build token must not be anywhere on the
+# image, and home must stay small because it is copied into the volume once.
+
 # Three exit codes, because the scan has to fail closed on its own failures:
 # 0 means no match, 3 means a file matched (a leak, printed as hits), anything
 # else (grep read errors, a vanished subtree mid-scan) is a scan failure and
@@ -52,3 +55,20 @@ if [ -n "${GH_TOKEN:-}" ]; then
 else
 	echo "skipped, no GH_TOKEN supplied"
 fi
+
+# Nothing heavy may live in $HOME at first boot: it is volume-backed, and
+# whatever is here gets copied in and frozen when the named volume is first
+# created.
+say "home stays small; build residue here gets frozen into the volume on first boot"
+home_kb="$("$ENGINE" run --rm "$img" /bin/bash -c 'du -sk /home/developer' | cut -f1)"
+echo "home is ${home_kb}K"
+[ "$home_kb" -le 48 ] ||
+	{
+		echo "home grew past 48K (it should stay near 24K); look for build residue writing into \$HOME (see AGENTS.md)" >&2
+		# Name the offenders instead of making the next person bisect the image: the
+		# usual culprits are mise's ~/.cache/sigstore-rust and ~/.local/state/mise,
+		# but a newly baked tool can put its download cache somewhere else.
+		"$ENGINE" run --rm "$img" /bin/bash -c \
+			'du -sk /home/developer/.[!.]* /home/developer/* 2>/dev/null | sort -rn | head -10' >&2 || true
+		exit 1
+	}

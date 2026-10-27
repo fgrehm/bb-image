@@ -4,6 +4,11 @@
 # shellcheck source=build/check/lib.sh
 # check-scope: repo
 
+# Repository checks run once, in the full job, because they read the repo rather
+# than the image. This file covers the three declarations that have to agree:
+# the flavor graph, the package inventories wired into it, and the node pin
+# duplicated between the Containerfile and the toolset config.
+
 say "the manifest drives the published flavor graph and generated targets"
 manifest="$root/container/flavors.tsv"
 tmp="$(mktemp -d)"
@@ -71,3 +76,39 @@ if grep -Eq '^[[:space:]]*(FLAVORS|SMOLVM_FLAVORS|BOOT_GATE_FLAVORS):' "$workflo
 	exit 1
 fi
 echo "manifest, generated bake, matrix, and workflow agree"
+
+# Each stage installs its package inventory from a file, which keeps the list
+# diffable on its own. The cost is that a list can be added and never wired into
+# a Containerfile (dead, and the author thinks the package ships), or a
+# Containerfile can reference a list that was renamed. Assert both directions.
+say "every packages inventory is wired into a Containerfile, and every reference resolves"
+rc=0
+for pkg in "$root"/container/packages-*.txt; do
+	name="container/${pkg##*/}"
+	grep -qF "$name" "$root"/container/Containerfile.* || {
+		echo "$name is not referenced by any Containerfile" >&2
+		rc=1
+	}
+done
+grep -hoE 'container/packages-[a-z-]+\.txt' "$root"/container/Containerfile.* | sort -u |
+	while IFS= read -r ref; do
+		[ -f "$root/$ref" ] || {
+			echo "$ref is referenced by a Containerfile but does not exist" >&2
+			exit 1
+		}
+	done || rc=1
+[ "$rc" = 0 ] || exit 1
+echo "packages inventories are wired in both directions"
+
+# The repo's Containerfile and mise.toml have to agree on the node version; the
+# duplication is what keeps a toolset edit from rebuilding the node and bb layers.
+# mise-slim.toml has its own copy for the same reason and its own flavor check.
+say "node version agrees between container/Containerfile.foundation and mise.toml"
+node_arg="$(sed -n 's/^ARG BB_NODE_VERSION=\(.*\)$/\1/p' "$root/container/Containerfile.foundation")"
+node_toml="$(sed -n 's/^node = "\(.*\)"$/\1/p' "$root/mise.toml")"
+[ "$node_arg" = "$node_toml" ] ||
+	{
+		echo "node mismatch: Containerfile says '$node_arg', mise.toml says '$node_toml'" >&2
+		exit 1
+	}
+echo "node $node_arg, agreed on both sides"

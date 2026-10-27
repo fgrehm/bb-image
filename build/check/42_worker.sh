@@ -4,6 +4,9 @@
 # shellcheck source=build/check/lib.sh
 # check-flavors: worker worker-vm
 
+# The worker contract: Node, Playwright and agent shims are baked, no BB server
+# or enrollment is, and the backup tool still works on a worker with no bb state.
+
 say "worker has Node and agent shims, but no baked BB or enrollment"
 node_arg="$(sed -n 's/^ARG BB_NODE_VERSION=\(.*\)$/\1/p' "$root/container/Containerfile.foundation")"
 slim_node="$(sed -n 's/^node = "\(.*\)"$/\1/p' "$root/container/mise-slim.toml")"
@@ -68,3 +71,18 @@ cmd="$("$ENGINE" image inspect "$img" --format '{{json .Config.Cmd}}')"
 	echo "$FLAVOR has command $cmd, expected $expected" >&2
 	exit 1
 }
+
+say "bb-backup handles a worker without bb state and mirrors a trace"
+crun <<'SH'
+set -eu
+bb-backup state --output /tmp/bb-backup-empty
+[ ! -e /tmp/bb-backup-empty ] || {
+	echo "empty state backup unexpectedly created an output directory" >&2
+	exit 1
+}
+mkdir -p /tmp/bb-backup-session
+printf '%s\n' worker-session > /tmp/bb-backup-session/session.txt
+bb-backup traces --output /tmp/bb-backup-traces --include /tmp/bb-backup-session
+grep -qx worker-session /tmp/bb-backup-traces/tmp/bb-backup-session/session.txt
+echo "empty state is a successful no-op; worker trace mirrored"
+SH

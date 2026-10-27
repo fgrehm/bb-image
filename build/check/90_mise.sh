@@ -4,6 +4,22 @@
 # shellcheck source=build/check/lib.sh
 # check-flavors: full slim worker vm exedev worker-vm
 
+# Two mise contracts: the unpinned agent CLIs auto-update from the global config,
+# and the data dir stays writable so derived images can add tools.
+
+say "mise loads automatic updates for the agent CLIs"
+crun <<'SH'
+set -eu
+for tool in claude codex pi opencode grok oh-my-pi; do
+	value="$(mise config get "tools.$tool.auto_update")"
+	[ "$value" = "true" ] || {
+		echo "$tool auto_update is '$value', expected true" >&2
+		exit 1
+	}
+done
+echo "all agent CLI shims auto-update from the global config"
+SH
+
 # The invariant derived images depend on: the mise data dir is developer-owned
 # and writable, so derived images can add tools and they stay usable. Run with
 # --user developer because the check's meaning is the permission the image user
