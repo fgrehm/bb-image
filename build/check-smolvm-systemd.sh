@@ -130,6 +130,61 @@ machine_id="$("$SMOLVM" machine exec --name "$name" -- cat /etc/machine-id | tr 
 }
 "$SMOLVM" machine exec --name "$name" -- \
 	su -s /bin/sh developer -c 'sudo -n true'
+
+# The only place the real systemd EnvironmentFile= merge is exercised: the
+# image default keeps bb on loopback, and the operator opt-in in
+# /etc/default/bb (read after it) turns the listener routable until it is
+# removed again. Every restart has to come back healthy on the new address.
+cat >"$tmp/listener.sh" <<'SH'
+set -eu
+
+hex="$(printf '%04X' "$BB_PORT")"
+# /proc/net/tcp rather than ss, which the guest does not carry.
+sockets() {
+	awk -v p=":$hex" 'NR > 1 && $2 ~ p"$" && $4 == "0A" { print $2 }' /proc/net/tcp | sort -u
+}
+
+wait_api() {
+	i=0
+	while [ "$i" -lt 60 ]; do
+		if curl -fsS "http://127.0.0.1:$BB_PORT/api/v1/hosts" >/dev/null 2>&1; then
+			return 0
+		fi
+		i=$((i + 1))
+		sleep 1
+	done
+	echo "bb API did not answer on 127.0.0.1:$BB_PORT within 60s" >&2
+	return 1
+}
+
+[ "$(sockets)" = "0100007F:$hex" ] || {
+	echo "expected only the loopback listener on port $BB_PORT on first boot, got: $(sockets)" >&2
+	exit 1
+}
+
+printf 'BB_SERVER_BIND_HOST=0.0.0.0\n' >/etc/default/bb
+systemctl restart bb.service
+wait_api
+case "$(sockets)" in
+*"00000000:$hex"*) ;;
+*)
+	echo "the opt-in did not make the listener routable: $(sockets)" >&2
+	exit 1
+	;;
+esac
+
+rm -f /etc/default/bb
+systemctl restart bb.service
+wait_api
+[ "$(sockets)" = "0100007F:$hex" ] || {
+	echo "removing the opt-in did not restore the loopback listener, got: $(sockets)" >&2
+	exit 1
+}
+
+echo "listener: loopback by default, routable on opt-in, loopback after opt-out"
+SH
+"$SMOLVM" machine exec --name "$name" -e "BB_PORT=$port" -- sh -c "$(cat "$tmp/listener.sh")"
+
 case "$FLAVOR" in
 exedev)
 	"$SMOLVM" machine exec --name "$name" -- test -x /usr/sbin/sshd
@@ -172,4 +227,4 @@ done
 
 stop_cleanly
 
-echo "$FLAVOR systemd gate passed: boot, target, bb, API, bootstrap sudo, persistence, restart, and bounded shutdown"
+echo "$FLAVOR systemd gate passed: boot, target, bb, API, listener default and opt-in, bootstrap sudo, persistence, restart, and bounded shutdown"
