@@ -48,10 +48,18 @@ matrix)
 		[ "$suffix" = "-" ] && suffix=""
 		[ "$smolvm" = yes ] && smolvm_json=true || smolvm_json=false
 		[ "$boot" = yes ] && boot_json=true || boot_json=false
-		[ "${first:-1}" = 1 ] || printf ','
-		first=0
-		printf '{"flavor":"%s","suffix":"%s","smolvm":%s,"boot":%s}' \
-			"$flavor" "$suffix" "$smolvm_json" "$boot_json"
+		# arm64 runners have no KVM, so flavors behind a smolvm host gate
+		# publish for amd64 only.
+		arches=amd64
+		[ "$smolvm" = yes ] || [ "$boot" = yes ] || arches="amd64 arm64"
+		for arch in $arches; do
+			runner=ubuntu-24.04
+			[ "$arch" = arm64 ] && runner=ubuntu-24.04-arm
+			[ "${first:-1}" = 1 ] || printf ','
+			first=0
+			printf '{"flavor":"%s","suffix":"%s","smolvm":%s,"boot":%s,"arch":"%s","platform":"linux/%s","runner":"%s"}' \
+				"$flavor" "$suffix" "$smolvm_json" "$boot_json" "$arch" "$arch" "$runner"
+		done
 	done
 	printf ']}\n'
 	;;

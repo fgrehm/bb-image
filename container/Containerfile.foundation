@@ -1,5 +1,6 @@
-# Pinned to the linux/amd64 manifest digest for Debian 13 (trixie).
-# Select the amd64 child digest with: podman manifest inspect docker.io/library/debian:13 | jq -r '.manifests[] | select(.platform.os == "linux" and .platform.architecture == "amd64") | .digest'.
+# Pinned to the multi-platform index digest for Debian 13 (trixie), so each
+# build platform resolves its own child manifest.
+# Read the index digest with: podman manifest inspect docker.io/library/debian:13 --verbose | jq -r '.digest' (or docker buildx imagetools inspect docker.io/library/debian:13).
 #
 # Version pins live here; build/build.sh passes them to dependent builds.
 # Keep each pin on one line for the Makefile, checks, and release workflow.
@@ -26,7 +27,7 @@ ARG BUILD_SCRATCH=/tmp/build-scratch
 # internal and never published. Other Containerfiles build FROM its local tag.
 # ---------------------------------------------------------------------------
 
-FROM docker.io/library/debian@sha256:15a71cc87173e191d5046f9c4288db4e8954b67f92e48d9587087826b0afe562 AS foundation
+FROM docker.io/library/debian@sha256:4c25275446ca371766b8b093c696782eabce06263fccacb8d5d813b3dc44b308 AS foundation
 
 ARG DEBIAN_FRONTEND
 ARG USERNAME

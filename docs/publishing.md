@@ -20,4 +20,4 @@ It publishes to GHCR as `ghcr.io/fgrehm/bb` using the built-in `GITHUB_TOKEN`, s
 
 For Docker Hub, add `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` repository secrets, change the login step to `docker/login-action` with `registry: docker.io` and those credentials, and change `IMAGE_NAME`.
 
-Images are built and supported for `linux/amd64` only.
+The container flavors (`full`, `slim`, `worker`) publish for `linux/amd64` and `linux/arm64`; the VM flavors publish for `linux/amd64` only, because their smolvm host gates need KVM, which GitHub's arm64 runners do not offer. `build/manifest.sh matrix` emits one job per flavor and platform, each built and verified on a native runner (`ubuntu-24.04` or `ubuntu-24.04-arm`) and pushed by digest; the `merge` job then tags a multi-platform index per flavor, so no tag moves until every platform of every flavor has passed `make check`.
