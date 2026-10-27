@@ -23,6 +23,7 @@ Carries bb 0.47.1.
 
 ### Fixed
 
+- The container smolvm example follows `edge` instead of the 0.2.0 image; pin an `img-<image-version>` tag for a reproducible machine.
 - Local smolvm smoke runs map a `13xxx` host port instead of the guest port: `13886` for the guest's 38886, `13000` for exedev's 3000. A dev server on 3000, or `make run` on 38886, no longer blocks them, and the guest port never moves. `SMOLVM_HOST_PORT=<port>` moves the host side further.
 - Correct the `BB_APP_URL` precedence in the docs: `bb-app config set` writes `~/.bb/config.json`, which bb reads after the service environment, so it wins over `/etc/default/bb` rather than being interchangeable with it.
 
