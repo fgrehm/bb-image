@@ -16,8 +16,10 @@ bb binds `127.0.0.1:38886` by default, so the published port in the example is n
 
 ```bash
 smolvm machine exec --name bb -- sh -c 'echo BB_SERVER_BIND_HOST=0.0.0.0 >> /etc/default/bb; systemctl restart bb.service'
-curl -s -o /dev/null -w '%{http_code}\n' http://localhost:38886/api/v1/hosts   # 200
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:13886/api/v1/hosts   # 200
 ```
+
+The examples map a `13xxx` host port so a local smoke run does not fight `make run` on 38886 or a dev server on 3000: `13886` for the guest's 38886, `13000` for exedev's 3000. The guest port never moves.
 
 The opt-in, its precedence, and the first-boot rule are in [The VM listener](running.md#the-vm-listener).
 
@@ -68,7 +70,7 @@ smolvm machine create --name bb --smolfile examples/smolvm-systemd/Smolfile --im
 
 ## Networking and credentials
 
-bb needs outbound access for provider APIs, Git, and package installs, so the example enables networking and publishes port 38886. The published port reaches bb only after the listener opt-in shown above. The agent CLI declarations are intentionally unpinned and installed lazily on first use; without a GitHub token, mise resolves them against GitHub's unauthenticated rate limit and can fail with an opaque 403.
+bb needs outbound access for provider APIs, Git, and package installs, so the example enables networking and publishes the guest's 38886 on host 13886. The published port reaches bb only after the listener opt-in shown above. The agent CLI declarations are intentionally unpinned and installed lazily on first use; without a GitHub token, mise resolves them against GitHub's unauthenticated rate limit and can fail with an opaque 403.
 
 smolvm secret references resolve per launch. Add this to a private copy of the Smolfile when token forwarding is needed:
 

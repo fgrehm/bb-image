@@ -5,7 +5,10 @@ image = "ghcr.io/fgrehm/bb:edge-vm"
 net = true
 
 [dev]
-ports = ["38886:38886"]
+# Host side 13886 so a local smoke run does not fight `make run` on 38886.
+# The guest port stays 38886, which is what the flavor listens on. Move the
+# host side with SMOLVM_HOST_PORT=<port> in the host gate.
+ports = ["13886:38886"]
 
 [health]
 exec = ["curl", "-fsS", "http://127.0.0.1:38886/api/v1/hosts"]

@@ -42,7 +42,7 @@ printf 'BB_SERVER_BIND_HOST=0.0.0.0\n' | sudo tee -a /etc/default/bb
 sudo systemctl restart bb.service
 ```
 
-Loopback is the default because a VM has a platform gateway or a guest-side proxy in front of it, and both shapes prefer a loopback listener. Inside the guest, `http://127.0.0.1:38886` (or `:3000` on `exedev`) works either way. Nothing outside reaches it until you opt in: the smolvm `[dev] ports` mapping, `exe.dev share port`, and a host `curl http://localhost:38886` all need a routable listener, which is the command above. A reverse proxy in the guest, such as Tailscale Serve, can only forward to `http://127.0.0.1`, which is why loopback is the default.
+Loopback is the default because a VM has a platform gateway or a guest-side proxy in front of it, and both shapes prefer a loopback listener. Inside the guest, `http://127.0.0.1:38886` (or `:3000` on `exedev`) works either way. Nothing outside reaches it until you opt in: the smolvm `[dev] ports` mapping (host 13886 to the guest's 38886 in the examples), `exe.dev share port`, and a host `curl` to that published port all need a routable listener, which is the command above. A reverse proxy in the guest, such as Tailscale Serve, can only forward to `http://127.0.0.1`, which is why loopback is the default.
 
 To put it back to loopback, delete the `BB_SERVER_BIND_HOST` line from `/etc/default/bb` and restart `bb.service`. If the value was set with `bb-app env set`, change it with `bb-app env set BB_SERVER_BIND_HOST 127.0.0.1` or delete the key from `~/.bb/env.json`, because that file outranks `/etc/default/bb`.
 

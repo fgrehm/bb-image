@@ -32,7 +32,9 @@ net = true
 
 [dev]
 # bb serves on 38886. Publishing a port needs networking, which is on above.
-ports = ["38886:38886"]
+# Host side 13886 keeps local smoke runs off the port `make run` uses; the
+# guest keeps 38886.
+ports = ["13886:38886"]
 
 # bb answers its own API without auth, so `smolvm machine monitor` can watch it
 # instead of guessing at a startup delay.
