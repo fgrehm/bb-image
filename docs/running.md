@@ -42,13 +42,15 @@ printf 'BB_SERVER_BIND_HOST=0.0.0.0\n' | sudo tee -a /etc/default/bb
 sudo systemctl restart bb.service
 ```
 
-Loopback is the default because a VM has a platform gateway or a guest-side proxy in front of it, and both shapes prefer a loopback listener. `vm` therefore no longer answers `curl http://localhost:38886` from the host until you opt in, because the published port reaches only a routable listener. On exe.dev the platform proxy cannot reach a loopback-bound bb, so the same opt-in is what makes `exe.dev share port` work; a reverse proxy in the guest, such as Tailscale Serve, can only forward to `http://127.0.0.1`, which is the default.
+Loopback is the default because a VM has a platform gateway or a guest-side proxy in front of it, and both shapes prefer a loopback listener. Inside the guest, `http://127.0.0.1:38886` (or `:3000` on `exedev`) works either way. Nothing outside reaches it until you opt in: the smolvm `[dev] ports` mapping, `exe.dev share port`, and a host `curl http://localhost:38886` all need a routable listener, which is the command above. A reverse proxy in the guest, such as Tailscale Serve, can only forward to `http://127.0.0.1`, which is why loopback is the default.
+
+To put it back to loopback, delete the `BB_SERVER_BIND_HOST` line from `/etc/default/bb` and restart `bb.service`. If the value was set with `bb-app env set`, change it with `bb-app env set BB_SERVER_BIND_HOST 127.0.0.1` or delete the key from `~/.bb/env.json`, because that file outranks `/etc/default/bb`.
 
 The listener and the request hostname are separate settings. `BB_SERVER_BIND_HOST` decides what bb listens on, `BB_BIND` in `make run` decides what the container publishes on the host, and `BB_APP_URL` decides which hostname bb accepts. See [Custom DNS and reverse proxies](#custom-dns-and-reverse-proxies).
 
 Neither platform offers a verified way to install configuration before the first `bb.service` start. A deployment that needs a routable listener from the first boot bakes `/etc/default/bb` into a derived image; see [Using this image as a base](derived-images.md).
 
-Interactive shells in the VM flavors print a reminder while the effective listener is loopback, with the opt-in command. Silence it with `BB_LISTENER_REMINDER=0` or `~/.config/bb/listener-reminder-disabled`; it disappears by itself once the listener is routable. Container flavors keep the entrypoint's `0.0.0.0` listener and never print it.
+Container flavors are different and unchanged: the entrypoint starts bb on `0.0.0.0:38886`, so publishing a port is enough. `make run BB_PORT=3000` publishes `127.0.0.1:3000` on the host and forwards it to the container's 38886.
 
 ## Upgrading to bb 0.45.0
 

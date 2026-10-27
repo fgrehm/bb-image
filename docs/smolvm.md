@@ -19,7 +19,7 @@ smolvm machine exec --name bb -- sh -c 'echo BB_SERVER_BIND_HOST=0.0.0.0 >> /etc
 curl -s -o /dev/null -w '%{http_code}\n' http://localhost:38886/api/v1/hosts   # 200
 ```
 
-The opt-in, its precedence, and the first-boot rule are in [The VM listener](running.md#the-vm-listener). Interactive guest shells remind you while the listener is loopback.
+The opt-in, its precedence, and the first-boot rule are in [The VM listener](running.md#the-vm-listener).
 
 The VM disk persists `/home/developer`, Podman images and containers, system state, caches, and machine identity across stop/start. systemd runs as root at PID 1 because it initializes and manages the guest; `bb.service` explicitly runs bb as uid/gid `developer`. The container-oriented `entrypoint.sh` is not PID 1 and is not used to start bb.
 

@@ -13,7 +13,6 @@ Carries bb 0.47.1.
 ### Added
 
 - `ip` and `ss` are now available in every flavor, from iproute2, beside net-tools' `netstat` and `ifconfig`. The docs and the VM gate already assumed them.
-- Interactive shells in the `vm` and `exedev` flavors say that bb listens on loopback only and print the opt-in command, following the passwordless-sudo reminder's suppression rules (`BB_LISTENER_REMINDER=0` or the config marker). Container flavors stay silent.
 
 ### Changed
 

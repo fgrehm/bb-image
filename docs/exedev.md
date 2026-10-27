@@ -47,7 +47,7 @@ exit
 ssh exe.dev share port my-bb 3000
 ```
 
-The guest's interactive reminder points at this opt-in while the listener is loopback; it stops once the listener is routable. Precedence and the first-boot rule are in [The VM listener](running.md#the-vm-listener).
+Precedence and the first-boot rule are in [The VM listener](running.md#the-vm-listener).
 
 Then open `https://my-bb.exe.xyz/api/v1/hosts` in a browser authenticated for the VM's private proxy. An unauthenticated `curl` is not a reliable bb health check; the loopback command above checks bb independently of proxy authentication.
 
