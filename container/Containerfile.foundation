@@ -26,7 +26,7 @@ ARG BUILD_SCRATCH=/tmp/build-scratch
 # internal and never published. Other Containerfiles build FROM its local tag.
 # ---------------------------------------------------------------------------
 
-FROM docker.io/library/debian@sha256:d5ce19d4736f0ebbacd686d1040271a5aeb0cc920f5990c1bfae1717627f0674 AS foundation
+FROM docker.io/library/debian@sha256:15a71cc87173e191d5046f9c4288db4e8954b67f92e48d9587087826b0afe562 AS foundation
 
 ARG DEBIAN_FRONTEND
 ARG USERNAME
