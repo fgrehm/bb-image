@@ -22,7 +22,7 @@ Slim adds bb and lazy agent CLIs without the browser layer or full's development
 
 The image follows Omarchy's [lazy-loading mise stubs](https://omarchy.org/manual/development-tools/): rather than baking in every toolchain, it ships mise shims and lets a tool install itself the first time you call it. Node.js is an exception, installed in foundation so every flavor shares the same pinned runtime; Playwright and Chromium are installed once in the browser layer inherited by full and worker.
 
-The toolset is `mise.toml` in this repo, installed into the image as the global mise config at `/opt/mise/config.toml`. Tools declared `lazy = true` receive bootstrap shims at build time; the baked developer tools are installed during the build instead. The first call to `go`, `python`, or `claude` installs that tool, then runs it.
+The toolset is `mise.toml` in this repo, installed into the image as the global mise config at `/opt/mise/config.toml`. Slim and worker install the smaller `container/mise-slim.toml` in the same place instead: node, pnpm and the agent CLIs, without the baked developer tools. Tools declared `lazy = true` receive bootstrap shims at build time; the baked developer tools are installed during the build instead. The first call to `go`, `python`, or `claude` installs that tool, then runs it.
 
 | Installed at build time | Installed on first use |
 | --- | --- |

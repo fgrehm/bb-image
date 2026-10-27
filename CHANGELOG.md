@@ -12,7 +12,7 @@ Carries bb 0.47.1.
 
 ### Added
 
-- `ip` and `ss` are now available in every flavor, from iproute2, beside net-tools' `netstat` and `ifconfig`. The docs and the VM gate already assumed them.
+- `ip` and `ss` are now available in every flavor, from iproute2, beside net-tools' `netstat` and `ifconfig`.
 
 ### Changed
 
