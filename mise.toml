@@ -60,7 +60,7 @@ neovim     = "0.12.6"
 ripgrep    = "15.2.0"
 jq         = "1.8.2"
 shfmt      = "3.14.1"
-git-lfs    = "3.8.0"
+git-lfs    = "3.8.1"
 fd         = "10.5.0"
 tmux       = "3.7c"
 shellcheck = "0.11.0"
@@ -76,7 +76,7 @@ bun = { version = "1.4.4", lazy = true }
 go = { version = "1.27.3", lazy = true }
 rust = { version = "1.99.1", lazy = true }
 python = { version = "3.15.2", lazy = true }
-gh = { version = "2.103.2", lazy = true }
+gh = { version = "2.103.3", lazy = true }
 
 # pnpm is here because agents meet pnpm projects, not because bb uses it. bb detects
 # package managers to report them and installs its plugins with npm, never pnpm. The
@@ -87,7 +87,7 @@ gh = { version = "2.103.2", lazy = true }
 # and runs whatever version a project declares in packageManager. Note that pnpm 10 and
 # later refuse to run dependency lifecycle scripts unless they are allow-listed, which is
 # why a native dependency can install cleanly and still be broken. `pnpm approve-builds`.
-pnpm = { version = "12.15.0", lazy = true }
+pnpm = { version = "12.16.1", lazy = true }
 
 # Pre-commit hooks. Deliberately unpinned.
 prek = { version = "latest", lazy = true }

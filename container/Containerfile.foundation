@@ -12,7 +12,7 @@ ARG USER_UID=1000
 ARG USER_GID=1000
 ARG MISE_VERSION=2026.10.21
 ARG BB_NODE_VERSION=26.12.1
-ARG BB_VERSION=0.47.1
+ARG BB_VERSION=0.48.0
 ARG PLAYWRIGHT_VERSION=1.64.1
 # A scratch dir every downloading RUN points its caches at and deletes before it
 # ends, ARG rather than ENV so none of it lands in the runtime environment; the
@@ -27,7 +27,7 @@ ARG BUILD_SCRATCH=/tmp/build-scratch
 # internal and never published. Other Containerfiles build FROM its local tag.
 # ---------------------------------------------------------------------------
 
-FROM docker.io/library/debian@sha256:4c25275446ca371766b8b093c696782eabce06263fccacb8d5d813b3dc44b308 AS foundation
+FROM docker.io/library/debian@sha256:2dc419c6d7fe3dad0a2f9fd469c34cc90b0f9ba642d8fde837fe3d7d34a0e7f1 AS foundation
 
 ARG DEBIAN_FRONTEND
 ARG USERNAME

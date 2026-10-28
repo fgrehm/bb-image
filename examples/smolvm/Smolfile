@@ -18,7 +18,7 @@
 # only, so on Apple Silicon it needs `rosetta = true`.
 
 # `edge` rides main. Pin an img-<image-version> tag for a reproducible machine, or a
-# bb version tag such as `0.47.1` to follow the bb release even when the image has not
+# bb version tag such as `0.48.0` to follow the bb release even when the image has not
 # been rebuilt.
 image = "ghcr.io/fgrehm/bb:edge"
 

@@ -25,7 +25,7 @@ env:
   IMAGE_NAME: ${{ github.repository_owner }}/bb
   # Host gate for the VM flavor. The archive and its checksum are fetched from
   # the matching upstream release rather than piping an installer into CI.
-  SMOLVM_VERSION: 1.18.2
+  SMOLVM_VERSION: 1.32.4
   # Flavor names, tag suffixes, and host gates come from container/flavors.tsv.
 
 jobs:
