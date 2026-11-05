@@ -6,6 +6,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- Update the bundled bb app to 0.48.1 and Playwright to 1.65.0 (including its bundled Chromium).
+- Update mise to 2026.11.2 and pnpm to 12.18.0; refresh the Debian 13 multi-platform base digest and the smolvm CI gate to 1.33.0.
+
 ## [0.10.0] - 2026-10-28
 
 Carries bb 0.48.0.
