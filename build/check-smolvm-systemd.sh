@@ -18,9 +18,13 @@ vm | exedev) ;;
 esac
 port=38886
 smolfile="$root/examples/smolvm-systemd/Smolfile"
+start_timeout=120
 if [ "$FLAVOR" = exedev ]; then
 	port=3000
 	smolfile="$root/examples/exedev/Smolfile"
+	# The exedev flavor carries SSH packages and can take longer to boot under
+	# a loaded CI runner than the vm flavor.
+	start_timeout=240
 fi
 name="bb-systemd-check-$$"
 tmp="${TMPDIR:-/tmp}/bb-systemd-check-$$"
@@ -74,6 +78,16 @@ stop_cleanly() {
 	fi
 }
 
+start_machine() {
+	status=0
+	timeout "$start_timeout" "$SMOLVM" machine start --name "$name" || status=$?
+	[ "$status" -eq 0 ] || {
+		echo "smolvm machine start failed with status $status (timeout: ${start_timeout}s)" >&2
+		return "$status"
+	}
+	running=1
+}
+
 dump_guest_diagnostics() {
 	echo "--- bb.service status ---" >&2
 	"$SMOLVM" machine exec --name "$name" -- \
@@ -106,8 +120,7 @@ marker="$($ENGINE image inspect "$IMAGE:$TAG" --format '{{ index .Config.Labels 
 	--image "$archive"
 created=1
 
-timeout 120 "$SMOLVM" machine start --name "$name"
-running=1
+start_machine
 
 ready=0
 for _ in $(seq 1 90); do
@@ -219,8 +232,7 @@ esac
 	su -s /bin/sh developer -c 'mkdir -p "$HOME/.bb" && printf phase0 > "$HOME/.bb/vm-persistence-probe"'
 
 stop_cleanly
-timeout 120 "$SMOLVM" machine start --name "$name"
-running=1
+start_machine
 
 ready=0
 for _ in $(seq 1 90); do
